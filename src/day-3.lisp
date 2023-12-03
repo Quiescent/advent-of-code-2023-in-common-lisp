@@ -22,35 +22,31 @@
                      (cons line
                            (read-map)))))
              (neighbours (engine-map i-in j-in seen)
-               (let ((x 0)
-                     (y 0)
-                     (max-x 0)
-                     (part-numbers (empty-seq)))
+               (let ((part-numbers (empty-seq)))
                  (iter
                    (for i from (max 0 (1- i-in)) to (min (1+ i-in) (1- (length (aref engine-map 0)))))
                    (iter
                      (for j from (max 0 (1- j-in)) to (min (1+ j-in) (length engine-map)))
                      (when (and (digit-char-p (-> (aref engine-map j) (aref i)))
                                 (not (contains? seen (cons i j))))
-                       (setf max-x 0)
-                       (iter
-                         (initially (setf max-x i)
-                                    (setf x i)
-                                    (setf y j))
-                         (while (and (< x (length (aref engine-map 0)))
-                                     (digit-char-p (-> (aref engine-map y) (aref x)))))
-                         (adjoinf seen (cons x y))
-                         (incf x)
-                         (incf max-x))
-                       (iter
-                         (initially (setf x i)
-                                    (setf y j))
-                         (while (and (>= x 0)
-                                     (digit-char-p (-> (aref engine-map y) (aref x)))))
-                         (adjoinf seen (cons x y))
-                         (decf x))
-                       (setf  part-numbers
-                              (with-last part-numbers (read-from-string (subseq (aref engine-map y) (1+ x) max-x)))))))
+                       (bind ((max-x i)
+                              (min-x i))
+                         (iter
+                           (for x upfrom i)
+                           (while (and (< x (length (aref engine-map 0)))
+                                       (digit-char-p (-> (aref engine-map j) (aref x)))))
+                           (adjoinf seen (cons x j))
+                           (incf max-x))
+                         (iter
+                           (for x downfrom i)
+                           (while (and (>= x 0)
+                                       (digit-char-p (-> (aref engine-map j) (aref x)))))
+                           (adjoinf seen (cons x j))
+                           (decf min-x))
+                         (setf part-numbers
+                               (with-last part-numbers (read-from-string (subseq (aref engine-map j)
+                                                                                 (1+ min-x)
+                                                                                 max-x))))))))
                  (list seen part-numbers)))
              (recur (i j engine-map parts part-numbers)
                (cond
@@ -58,9 +54,9 @@
                  ((>= j (length engine-map)) (reduce #'+ part-numbers))
                  (t (bind ((point (-> (aref engine-map j) (aref i)))
                            ((new-parts new-part-numbers) (if (and (not (digit-char-p point))
-                                                                          (not (char-equal point #\.)))
-                                                                     (neighbours engine-map i j parts)
-                                                                     (list parts (empty-seq)))))
+                                                                  (not (char-equal point #\.)))
+                                                             (neighbours engine-map i j parts)
+                                                             (list parts (empty-seq)))))
                       (recur (1+ i)
                              j
                              engine-map
@@ -78,35 +74,31 @@
                      (cons line
                            (read-map)))))
              (neighbours (engine-map i-in j-in seen)
-               (let ((x 0)
-                     (y 0)
-                     (max-x 0)
-                     (part-numbers (empty-seq)))
+               (let ((part-numbers (empty-seq)))
                  (iter
                    (for i from (max 0 (1- i-in)) to (min (1+ i-in) (1- (length (aref engine-map 0)))))
                    (iter
                      (for j from (max 0 (1- j-in)) to (min (1+ j-in) (length engine-map)))
                      (when (and (digit-char-p (-> (aref engine-map j) (aref i)))
                                 (not (contains? seen (cons i j))))
-                       (setf max-x 0)
-                       (iter
-                         (initially (setf max-x i)
-                                    (setf x i)
-                                    (setf y j))
-                         (while (and (< x (length (aref engine-map 0)))
-                                     (digit-char-p (-> (aref engine-map y) (aref x)))))
-                         (adjoinf seen (cons x y))
-                         (incf x)
-                         (incf max-x))
-                       (iter
-                         (initially (setf x i)
-                                    (setf y j))
-                         (while (and (>= x 0)
-                                     (digit-char-p (-> (aref engine-map y) (aref x)))))
-                         (adjoinf seen (cons x y))
-                         (decf x))
-                       (setf  part-numbers
-                              (with-last part-numbers (read-from-string (subseq (aref engine-map y) (1+ x) max-x)))))))
+                       (bind ((max-x i)
+                              (min-x i))
+                         (iter
+                           (for x upfrom i)
+                           (while (and (< x (length (aref engine-map 0)))
+                                       (digit-char-p (-> (aref engine-map j) (aref x)))))
+                           (adjoinf seen (cons x j))
+                           (incf max-x))
+                         (iter
+                           (for x downfrom i)
+                           (while (and (>= x 0)
+                                       (digit-char-p (-> (aref engine-map j) (aref x)))))
+                           (adjoinf seen (cons x j))
+                           (decf min-x))
+                         (setf part-numbers
+                               (with-last part-numbers (read-from-string (subseq (aref engine-map j)
+                                                                                 (1+ min-x)
+                                                                                 max-x))))))))
                  (list seen part-numbers)))
              (recur (i j engine-map parts acc)
                (cond
