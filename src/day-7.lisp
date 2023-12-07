@@ -96,7 +96,8 @@
          (sorted (sort problem #'hand-less-p)))
     (iter
       (for i from 1)
-      (for (cards type score) in sorted)
+      (for card-type-score in sorted)
+      (for score = (caddr card-type-score))
       (summing (* i score)))))
 
 (defun hand-type-2 (cards)
@@ -112,6 +113,7 @@
                                                 c))
                                           cards)))
       (for type = (do-bag-pairs (key value content acc)
+                    (declare (ignore key))
                     (setq acc (cond
                                 ((contains? (set 'five-of-a-kind
                                                  'four-of-a-kind
@@ -180,7 +182,6 @@
          (sorted (sort problem #'hand-less-p-2)))
     (iter
       (for i from 1)
-      (for (cards type score) in sorted)
+      (for card-type-score in sorted)
+      (for score = (caddr card-type-score))
       (summing (* i score)))))
-
-;; Wrong 251339180
