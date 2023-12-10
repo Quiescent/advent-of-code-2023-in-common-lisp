@@ -297,16 +297,16 @@
 (defvar on-outside-edge nil)
 
 (defun trace-loop (grid loop outside-edges start-dir start-x start-y)
-  (labels ((recur (x y dir seen)
+  (labels ((recur (x y dir prev-x prev-y)
              (cond
-               ((contains? seen (cons x y)) nil)
+               ((and prev-x prev-y (= x start-x) (= y start-y)) nil)
                ((contains? outside-edges (cons (cons x y) dir)) t)
                (t
-                (bind ((new-seen (with seen (cons x y)))
-                       (from (-> (aref grid y) (aref x)))
+                (bind ((from (-> (aref grid y) (aref x)))
                        (next (car (remove nil
                                           (list (and (contains? loop (cons (1- x) y))
-                                                     (not (contains? seen (cons (1- x) y)))
+                                                     (not (and (eq (1- x) prev-x)
+                                                               (eq y prev-y)))
                                                      (pipe-connects from
                                                                     (-> (aref grid y)
                                                                       (aref (1- x)))
@@ -316,7 +316,8 @@
                                                                                   'left
                                                                                   dir)))
                                                 (and (contains? loop (cons (1+ x) y))
-                                                     (not (contains? seen (cons (1+ x) y)))
+                                                     (not (and (eq (1+ x) prev-x)
+                                                               (eq y prev-y)))
                                                      (pipe-connects from
                                                                     (-> (aref grid y)
                                                                       (aref (1+ x)))
@@ -326,7 +327,8 @@
                                                                                   'right
                                                                                   dir)))
                                                 (and (contains? loop (cons x (1- y)))
-                                                     (not (contains? seen (cons x (1- y))))
+                                                     (not (and (eq x  prev-x)
+                                                               (eq (1- y) prev-y)))
                                                      (pipe-connects from
                                                                     (-> (aref grid (1- y))
                                                                       (aref x))
@@ -336,7 +338,8 @@
                                                                                   'up
                                                                                   dir)))
                                                 (and (contains? loop (cons x (1+ y)))
-                                                     (not (contains? seen (cons x (1+ y))))
+                                                     (not (and (eq x prev-x)
+                                                               (eq (1+ y) prev-y)))
                                                      (pipe-connects from
                                                                     (-> (aref grid (1+ y))
                                                                       (aref x))
@@ -347,13 +350,13 @@
                                                                                   dir)))))) ))
                   (if next
                       (bind (((n-x n-y n-dir) next))
-                        (recur n-x n-y n-dir new-seen))
+                        (recur n-x n-y n-dir x y))
                       nil))))))
-    (or (contains? on-outside-edge (list start-x start-y start-dir))
-        (bind ((result (recur start-x start-y start-dir (empty-set))))
+    (or (gethash (list start-x start-y start-dir) on-outside-edge)
+        (bind ((result (recur start-x start-y start-dir nil nil)))
           (if result
               (progn
-                (adjoinf on-outside-edge (list start-x start-y start-dir))
+                (setf (gethash (list start-x start-y start-dir) on-outside-edge) t)
                 result)
               nil)))))
 
@@ -507,7 +510,7 @@
 (defun part-2 ()
   (bind ((problem (read-problem))
          (loop (loop-tiles problem))
-         (on-outside-edge (empty-set))
+         (on-outside-edge (make-hash-table :test #'equal))
          (outside (empty-set))
          (inside (empty-set))
          (edge-connections (convert 'set (pipe-edge-connected-to-edge problem loop))))
