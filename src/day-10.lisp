@@ -125,7 +125,6 @@
 (defun loop-length (grid)
   (bind (((start-x . start-y) (find-start grid)))
     (labels ((recur (acc x y from)
-               ;; (format t "(list x y acc): ~a~%" (list x y acc))
                (if (and from
                         (= x start-x)
                         (= y start-y))
@@ -219,7 +218,7 @@
     (remove nil)
     car))
 
-(defun not-in-loop (from to x y direction loop)
+(defun not-in-loop (x y loop)
   (not (contains? loop (cons x y))))
 
 (defun connects-to-edge (grid loop x-in y-in)
@@ -232,7 +231,6 @@
                         (up    (and (> y 0) (-> (aref grid (1- y)) (aref x))))
                         (down  (and (< y (1- (length grid))) (-> (aref grid (1+ y)) (aref x))))
                         (new-seen (with seen (cons x y))))
-                   ;; (format t "(cons x y): ~a~%" (cons x y))
                    (if (or (= x 0)
                            (= y 0)
                            (= x (1- (length (aref grid 0))))
@@ -243,140 +241,27 @@
                                      (remove nil
                                              (list (and left
                                                         (not (contains? seen (cons (1- x) y)))
-                                                        (not-in-loop (-> (aref grid y) (aref x))
-                                                                        left
-                                                                        (1- x)
-                                                                        y
-                                                                        'left
-                                                                        loop)
+                                                        (not-in-loop (1- x) y loop)
                                                         (list (1- x) y 'right))
                                                    
                                                    (and right
                                                         (not (contains? seen (cons (1+ x) y)))
-                                                        (not-in-loop (-> (aref grid y) (aref x))
-                                                                        right
-                                                                        (1+ x)
-                                                                        y
-                                                                        'right
-                                                                        loop)
+                                                        (not-in-loop (1+ x) y loop)
                                                         (list (1+ x) y 'left))
                                                    
                                                    (and up
                                                         (not (contains? seen (cons x (1- y))))
-                                                        (not-in-loop (-> (aref grid y) (aref x))
-                                                                        up
-                                                                        x
-                                                                        (1- y)
-                                                                        'up
-                                                                        loop)
+                                                        (not-in-loop x (1- y) loop)
                                                         (list x (1- y) 'down))
                                                    
                                                    (and down
                                                         (not (contains? seen (cons x (1+ y))))
-                                                        (not-in-loop (-> (aref grid y) (aref x))
-                                                                        down
-                                                                        x
-                                                                        (1+ y)
-                                                                        'down
-                                                                        loop)
+                                                        (not-in-loop x (1+ y) loop)
                                                         (list x (1+ y) 'up))))
                                      rest)
                         new-seen))))))
     (recur (list (list x-in y-in nil))
            (empty-set))))
-
-;; (defun move-on-pipe (from-tile to-tile dir)
-;;   (case from-tile
-;;     (#\| (case to-tile
-;;            (#\| dir)
-;;            (#\- (error "invalid"))
-;;            (#\L (case dir
-;;                   (left 'down)
-;;                   (right 'up)))
-;;            (#\J (case dir
-;;                   (left 'up)
-;;                   (right 'down)))
-;;            (#\7 (case dir
-;;                   (left 'down)
-;;                   (right 'up)))
-;;            (#\F (case dir
-;;                   (left 'up)
-;;                   (right 'down)))))
-;;     (#\- (case to-tile
-;;            (#\| (error "invalid"))
-;;            (#\- dir)
-;;            (#\L (error "invalid"))
-;;            (#\J (case dir
-;;                   (up 'left)
-;;                   (down 'right)))
-;;            (#\7 (case dir
-;;                   (up 'left)
-;;                   (down 'right)))
-;;            (#\F (case dir
-;;                   (up 'left)
-;;                   (down 'right)))))
-;;     (#\L (case to-tile
-;;            (#\| (error "invalid"))
-;;            (#\- (or (case dir
-;;                       (left 'down)
-;;                       (right 'up))
-;;                     dir))
-;;            (#\L (error "invalid"))
-;;            (#\J (case dir
-;;                   (up 'left)
-;;                   (down 'right)
-;;                   (left 'right)
-;;                   (right 'left)))
-;;            (#\7 (or (case dir
-;;                       (up 'right)
-;;                       (down 'left))
-;;                     dir))
-;;            (#\F (error "invalid"))))
-;;     (#\J (case to-tile
-;;            (#\| (or (case dir
-;;                       (up 'left)
-;;                       (down 'right))
-;;                     dir))
-;;            (#\- (error "invalid"))
-;;            (#\L (error "invalid"))
-;;            (#\J (error "invalid"))
-;;            (#\7 (case dir
-;;                   (left 'down)
-;;                   (right 'up)
-;;                   (up 'down)
-;;                   (down 'up)))
-;;            (#\F (or (case dir
-;;                       (up 'left)
-;;                       (down 'right))
-;;                     dir))))
-;;     (#\7 (case to-tile
-;;            (#\| dir)
-;;            (#\- (error "invalid"))
-;;            (#\L (or (case dir
-;;                       (left 'down)
-;;                       (right 'up))
-;;                     dir))
-;;            (#\J (case dir
-;;                   (left 'up)
-;;                   (right 'down)
-;;                   (up 'down)
-;;                   (down 'up)))
-;;            (#\7 (error "invalid"))
-;;            (#\F (error "invalid"))))
-;;     (#\F (case to-tile
-;;            (#\| dir)
-;;            (#\- (error "invalid"))
-;;            (#\L (case dir
-;;                   (up 'down)
-;;                   (down 'up)
-;;                   (right 'up)
-;;                   (left 'down)))
-;;            (#\J (or (case dir
-;;                       (right 'down)
-;;                       (left 'up))
-;;                     dir))
-;;            (#\7 (error "invalid"))
-;;            (#\F (error "invalid"))))))
 
 (defun clockwise-90 (x)
   (* x #c(0 1)))
@@ -384,7 +269,7 @@
 (defun anticlockwise-90 (x)
   (* x #c(0 -1)))
 
-(defun move-on-pipe (from next-tile move dir)
+(defun move-on-pipe (next-tile move dir)
   (case next-tile
     (#\| dir)
     (#\- dir)
@@ -409,66 +294,68 @@
            (up (clockwise-90 dir))
            (down (error "invalid"))))))
 
-(defun trace-loop (grid loop edge-connections start-dir start-x start-y)
-  ;; (print "NEW")
+(defvar on-outside-edge nil)
+
+(defun trace-loop (grid loop outside-edges start-dir start-x start-y)
   (labels ((recur (x y dir seen)
-             ;; (format t "(list x y dir): ~a~%" (list x y dir))
              (cond
-               ((member (cons (cons x y) dir) edge-connections :test #'equal) nil)
+               ((contains? seen (cons x y)) nil)
+               ((contains? outside-edges (cons (cons x y) dir)) t)
                (t
                 (bind ((new-seen (with seen (cons x y)))
                        (from (-> (aref grid y) (aref x)))
-                       (next (car
-                              (remove nil
-                                      (list (and (contains? loop (cons (1- x) y))
-                                                 (not (contains? seen (cons (1- x) y)))
-                                                 (pipe-connects from
-                                                                (-> (aref grid y)
-                                                                  (aref (1- x)))
-                                                                'left)
-                                                 (list (1- x) y (move-on-pipe from
-                                                                              (-> (aref grid y)
-                                                                                (aref (1- x)))
-                                                                              'left
-                                                                              dir)))
-                                            (and (contains? loop (cons (1+ x) y))
-                                                 (not (contains? seen (cons (1+ x) y)))
-                                                 (pipe-connects from
-                                                                (-> (aref grid y)
-                                                                  (aref (1+ x)))
-                                                                'right)
-                                                 (list (1+ x) y (move-on-pipe from
-                                                                              (-> (aref grid y)
-                                                                                (aref (1+ x)))
-                                                                              'right
-                                                                              dir)))
-                                            (and (contains? loop (cons x (1- y)))
-                                                 (not (contains? seen (cons x (1- y))))
-                                                 (pipe-connects from
-                                                                (-> (aref grid (1- y))
-                                                                  (aref x))
-                                                                'up)
-                                                 (list x (1- y) (move-on-pipe from
-                                                                              (-> (aref grid (1- y))
-                                                                                (aref x))
-                                                                              'up
-                                                                              dir)))
-                                            (and (contains? loop (cons x (1+ y)))
-                                                 (not (contains? seen (cons x (1+ y))))
-                                                 (pipe-connects from
-                                                                (-> (aref grid (1+ y))
-                                                                  (aref x))
-                                                                'down)
-                                                 (list x (1+ y) (move-on-pipe from
-                                                                              (-> (aref grid (1+ y))
-                                                                                (aref x))
-                                                                              'down
-                                                                              dir)))))) ))
+                       (next (car (remove nil
+                                          (list (and (contains? loop (cons (1- x) y))
+                                                     (not (contains? seen (cons (1- x) y)))
+                                                     (pipe-connects from
+                                                                    (-> (aref grid y)
+                                                                      (aref (1- x)))
+                                                                    'left)
+                                                     (list (1- x) y (move-on-pipe (-> (aref grid y)
+                                                                                    (aref (1- x)))
+                                                                                  'left
+                                                                                  dir)))
+                                                (and (contains? loop (cons (1+ x) y))
+                                                     (not (contains? seen (cons (1+ x) y)))
+                                                     (pipe-connects from
+                                                                    (-> (aref grid y)
+                                                                      (aref (1+ x)))
+                                                                    'right)
+                                                     (list (1+ x) y (move-on-pipe (-> (aref grid y)
+                                                                                    (aref (1+ x)))
+                                                                                  'right
+                                                                                  dir)))
+                                                (and (contains? loop (cons x (1- y)))
+                                                     (not (contains? seen (cons x (1- y))))
+                                                     (pipe-connects from
+                                                                    (-> (aref grid (1- y))
+                                                                      (aref x))
+                                                                    'up)
+                                                     (list x (1- y) (move-on-pipe (-> (aref grid (1- y))
+                                                                                    (aref x))
+                                                                                  'up
+                                                                                  dir)))
+                                                (and (contains? loop (cons x (1+ y)))
+                                                     (not (contains? seen (cons x (1+ y))))
+                                                     (pipe-connects from
+                                                                    (-> (aref grid (1+ y))
+                                                                      (aref x))
+                                                                    'down)
+                                                     (list x (1+ y) (move-on-pipe (-> (aref grid (1+ y))
+                                                                                    (aref x))
+                                                                                  'down
+                                                                                  dir)))))) ))
                   (if next
                       (bind (((n-x n-y n-dir) next))
                         (recur n-x n-y n-dir new-seen))
-                      t))))))
-    (recur start-x start-y start-dir (empty-set))))
+                      nil))))))
+    (or (contains? on-outside-edge (list start-x start-y start-dir))
+        (bind ((result (recur start-x start-y start-dir (empty-set))))
+          (if result
+              (progn
+                (adjoinf on-outside-edge (list start-x start-y start-dir))
+                result)
+              nil)))))
 
 (defun initial-direction (entry-direction tile)
   (case entry-direction
@@ -505,107 +392,91 @@
        (#\7 #c(0 -1))
        (#\F #c(0 -1))))))
 
-(defun check-inside-with-squeezes (grid loop edge-connections x-in y-in)
+(defun check-inside-with-squeezes (grid loop outside-edges inside outside x-in y-in)
   (labels ((recur (to-check seen)
-             (if (null to-check)
+             (if (empty? to-check)
                  (values t seen)
-                 (bind ((((x y from) . rest) to-check)
-                        (left  (and (> x 0) (-> (aref grid y) (aref (1- x)))))
-                        (right (and (< x (1- (length (aref grid 0)))) (-> (aref grid y) (aref (1+ x)))))
-                        (up    (and (> y 0) (-> (aref grid (1- y)) (aref x))))
-                        (down  (and (< y (1- (length grid))) (-> (aref grid (1+ y)) (aref x))))
+                 (bind ((next (first to-check))
+                        ((x . y) next)
                         (new-seen (with seen (cons x y))))
-                   ;; (format t "(cons x y): ~a~%" (cons x y))
-                   (if (or (= x 0)
-                           (= y 0)
-                           (= x (1- (length (aref grid 0))))
-                           (= y (1- (length grid))))
-                       (values nil (with seen (cons x y)))
-                       (cond
-                         ((and left
-                               (not (contains? seen (cons (1- x) y)))
-                               (contains? loop (cons (1- x) y)))
-                          (values (trace-loop grid
-                                              loop
-                                              edge-connections
-                                              (initial-direction 'left (-> (aref grid y) (aref (1- x))))
-                                              (1- x)
-                                              y)
-                                  new-seen))
-                         ((and right
-                               (not (contains? seen (cons (1+ x) y)))
-                               (contains? loop (cons (1+ x) y)))
-                          (values (trace-loop grid
-                                              loop
-                                              edge-connections
-                                              (initial-direction 'right (-> (aref grid y) (aref (1+ x))))
-                                              (1+ x)
-                                              y)
-                                  new-seen))
-                         ((and up
-                               (not (contains? seen (cons x (1- y))))
-                               (contains? loop (cons x (1- y))))
-                          (values (trace-loop grid
-                                              loop
-                                              edge-connections
-                                              (initial-direction 'up (-> (aref grid (1- y)) (aref x)))
-                                              x
-                                              (1- y)) new-seen))
-                         ((and down
-                               (not (contains? seen (cons x (1+ y))))
-                               (contains? loop (cons x (1+ y))))
-                          (values (trace-loop grid
-                                              loop
-                                              edge-connections
-                                              (initial-direction 'down (-> (aref grid (1+ y)) (aref x)))
-                                              x
-                                              (1+ y))
-                                  new-seen))
-                         (t (recur
-                             (concatenate 'list
-                                          (remove nil
-                                                  (list (and left
-                                                             (not (contains? seen (cons (1- x) y)))
-                                                             (not-in-loop (-> (aref grid y) (aref x))
-                                                                          left
-                                                                          (1- x)
-                                                                          y
-                                                                          'left
-                                                                          loop)
-                                                             (list (1- x) y 'right))
-                                                   
-                                                        (and right
-                                                             (not (contains? seen (cons (1+ x) y)))
-                                                             (not-in-loop (-> (aref grid y) (aref x))
-                                                                          right
-                                                                          (1+ x)
-                                                                          y
-                                                                          'right
-                                                                          loop)
-                                                             (list (1+ x) y 'left))
-                                                   
-                                                        (and up
-                                                             (not (contains? seen (cons x (1- y))))
-                                                             (not-in-loop (-> (aref grid y) (aref x))
-                                                                          up
-                                                                          x
-                                                                          (1- y)
-                                                                          'up
-                                                                          loop)
-                                                             (list x (1- y) 'down))
-                                                   
-                                                        (and down
-                                                             (not (contains? seen (cons x (1+ y))))
-                                                             (not-in-loop (-> (aref grid y) (aref x))
-                                                                          down
-                                                                          x
-                                                                          (1+ y)
-                                                                          'down
-                                                                          loop)
-                                                             (list x (1+ y) 'up))))
-                                          rest)
-                             new-seen))))))))
-    (recur (list (list x-in y-in nil))
+                   (cond
+                     ((contains? inside next)  (values t seen))
+                     ((contains? outside next) (values nil seen))
+                     (t (bind ((rest (less-first to-check))
+                               (left  (and (> x 0) (-> (aref grid y) (aref (1- x)))))
+                               (right (and (< x (1- (length (aref grid 0)))) (-> (aref grid y) (aref (1+ x)))))
+                               (up    (and (> y 0) (-> (aref grid (1- y)) (aref x))))
+                               (down  (and (< y (1- (length grid))) (-> (aref grid (1+ y)) (aref x)))))
+                          (if (or (= x 0)
+                                  (= y 0)
+                                  (= x (1- (length (aref grid 0))))
+                                  (= y (1- (length grid))))
+                              (values nil (with seen (cons x y)))
+                              (cond
+                                ((and left (contains? loop (cons (1- x) y)))
+                                 (values (not (trace-loop grid
+                                                          loop
+                                                          outside-edges
+                                                          (initial-direction 'left
+                                                                             (-> (aref grid y)
+                                                                               (aref (1- x))))
+                                                          (1- x)
+                                                          y))
+                                         new-seen))
+                                ((and right (contains? loop (cons (1+ x) y)))
+                                 (values (not (trace-loop grid
+                                                          loop
+                                                          outside-edges
+                                                          (initial-direction 'right
+                                                                             (-> (aref grid y)
+                                                                               (aref (1+ x))))
+                                                          (1+ x)
+                                                          y))
+                                         new-seen))
+                                ((and up (contains? loop (cons x (1- y))))
+                                 (values (not (trace-loop grid
+                                                          loop
+                                                          outside-edges
+                                                          (initial-direction 'up
+                                                                             (-> (aref grid (1- y))
+                                                                               (aref x)))
+                                                          x
+                                                          (1- y)))
+                                         new-seen))
+                                ((and down (contains? loop (cons x (1+ y))))
+                                 (values (not (trace-loop grid
+                                                          loop
+                                                          outside-edges
+                                                          (initial-direction 'down
+                                                                             (-> (aref grid (1+ y))
+                                                                               (aref x)))
+                                                          x
+                                                          (1+ y)))
+                                         new-seen))
+                                (t (recur
+                                    (concat rest
+                                            (remove nil
+                                                    (seq (and left
+                                                              (not (contains? seen (cons (1- x) y)))
+                                                              (not-in-loop (1- x) y loop)
+                                                              (cons (1- x) y))
+                                                         
+                                                         (and right
+                                                              (not (contains? seen (cons (1+ x) y)))
+                                                              (not-in-loop (1+ x) y loop)
+                                                              (cons (1+ x) y))
+                                                         
+                                                         (and up
+                                                              (not (contains? seen (cons x (1- y))))
+                                                              (not-in-loop x (1- y) loop)
+                                                              (cons x (1- y)))
+                                                         
+                                                         (and down
+                                                              (not (contains? seen (cons x (1+ y))))
+                                                              (not-in-loop x (1+ y) loop)
+                                                              (cons x (1+ y))))))
+                                    new-seen)))))))))))
+    (recur (seq (cons x-in y-in))
            (empty-set))))
 
 (defun replace-start (grid)
@@ -636,28 +507,28 @@
 (defun part-2 ()
   (bind ((problem (read-problem))
          (loop (loop-tiles problem))
+         (on-outside-edge (empty-set))
          (outside (empty-set))
          (inside (empty-set))
-         (edge-connection (pipe-edge-connected-to-edge problem loop)))
+         (edge-connections (convert 'set (pipe-edge-connected-to-edge problem loop))))
     (replace-start problem)
-    ;; (print edge-connection)
-    ;; (trace-loop problem loop edge-connection #c(-1 0) 2 3)
-    ;; (bind (((:values is-inside tiles) (check-inside-with-squeezes problem loop edge-connection 14 3)))
-    ;;   (format t "(list is-inside tiles): ~a~%" (list is-inside tiles)))
-    ;; (format t "loop: ~a~%" loop)
     (iter
       (for y from 0 below (length problem))
       (iter
         (for x from 0 below (length (aref problem 0)))
         (format t "(cons x y): ~a~%" (cons x y))
-        ;; (format t "NEW~%")
         (when (and (not (contains? inside  (cons x y)))
                    (not (contains? outside (cons x y)))
                    (not (contains? loop (cons x y))))
-          (bind (((:values is-inside tiles) (check-inside-with-squeezes problem loop edge-connection x y)))
+          (bind (((:values is-inside tiles) (check-inside-with-squeezes problem
+                                                                        loop
+                                                                        edge-connections
+                                                                        inside
+                                                                        outside
+                                                                        x
+                                                                        y)))
             (if is-inside
                 (setf inside  (union (set-difference inside loop) tiles))
                 (setf outside (union (set-difference outside loop) tiles)))))))
-    (format t "outside: ~a~%" outside)
     (format t "inside: ~a~%" inside)
     (size inside)))
