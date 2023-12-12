@@ -49,14 +49,32 @@
          0)))
 
 (defun can-place-here (map number i)
-  (and (< (+ i number) (length map))
-       (or (= (+ i number) (1- (length map)))
+  (and (<= (+ i number) (length map))
+       (or (>= (+ i number) (1- (length map)))
            (not (char-equal (aref map (+ i number)) #\#)))
        (iter
          (for j from i below (+ i number))
          (for char = (aref map j))
          (always (or (char-equal char #\#)
                      (char-equal char #\?))))))
+
+(defun count-arrangements-2 (map numbers i)
+  ;; (format t "(list numbers i): ~a~%" (list numbers i))
+  (cond
+    ((null numbers) 1)
+    ((>= i (length map)) 0)
+    ((char-equal (aref map i) #\.) (count-arrangements-2 map numbers (1+ i)))
+    (t
+     (+ (if (can-place-here map (car numbers) i)
+            (count-arrangements-2 map
+                                  (cdr numbers)
+                                  (+ 1 i (car numbers)))
+            0)
+        (if (char-equal (aref map i) #\?)
+            (count-arrangements-2 map
+                                  numbers
+                                  (1+ i))
+            0)))))
 
 (defun count-arrangements (map numbers i)
   ;; (format t "(list numbers i): ~a~%" (list numbers i))
@@ -88,9 +106,10 @@
          (seen (make-hash-table)))
     (iter
       (for (map . numbers) in problem)
-      (summing (count-arrangements map numbers 0)))))
+      (summing (count-arrangements-2 map numbers 0)))))
 
 ;; Wrong: 8337
+;; Wrong: 8345
 
 (defun part-2 ()
   (bind ((problem (read-problem)))
