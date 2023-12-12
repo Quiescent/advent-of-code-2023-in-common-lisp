@@ -24,33 +24,13 @@
     (labels ((recur (acc)
                (bind ((line (read-line f nil nil)))
                  (if (null line)
-                     acc
+                     (nreverse acc)
                      (recur (cons (parse-line line) acc))))))
       (recur nil))))
 
-(defun length-of-next-run (map start)
-  (iter
-    (for i from start below (length map))
-    (for char = (aref map i))
-    (while (char-equal char #\#))
-    (counting t into l)
-    (finally (return (cons l i)))))
-
-(defun available-length (map start)
-  (+ (iter
-       (for i from start below (length map))
-       (for char = (aref map i))
-       (while (or (char-equal char #\?)
-                  (char-equal char #\#)))
-       (counting t))
-     (if (and (< start (length map))
-              (char-equal (aref map start) #\#))
-         -1
-         0)))
-
 (defun can-place-here (map number i)
   (and (<= (+ i number) (length map))
-       (or (>= (+ i number) (1- (length map)))
+       (or (> (+ i number) (1- (length map)))
            (not (char-equal (aref map (+ i number)) #\#)))
        (iter
          (for j from i below (+ i number))
@@ -58,59 +38,106 @@
          (always (or (char-equal char #\#)
                      (char-equal char #\?))))))
 
+(defvar seen nil)
+
 (defun count-arrangements-2 (map numbers i)
-  ;; (format t "(list numbers i): ~a~%" (list numbers i))
+  ;; (format t "(list map numbers i): ~a~%" (list map numbers i))
+  (or #1=(gethash (cons i numbers) seen)
+      (setf #1# (cond
+                  ((null numbers) (if (and (< i (length map))
+                                           (find #\# map :start i))
+                                      0
+                                      1))
+                  ((>= i (length map)) 0)
+                  ((char-equal (aref map i) #\.) (count-arrangements-2 map numbers (1+ i)))
+                  (t
+                   (+ (if (can-place-here map (car numbers) i)
+                          (progn
+                            ;; (format t "Placing at ~a~%" i)
+                            (count-arrangements-2 map
+                                                  (cdr numbers)
+                                                  (+ 1 i (car numbers))))
+                          0)
+                      (if (char-equal (aref map i) #\?)
+                          (count-arrangements-2 map
+                                                numbers
+                                                (1+ i))
+                          0)))))))
+
+(defun count-arrangements-2-uncached (map numbers i)
+  ;; (format t "(list map numbers i): ~a~%" (list map numbers i))
   (cond
-    ((null numbers) 1)
+    ((null numbers) (if (and (< i (length map))
+                             (find #\# map :start i))
+                        0
+                        1))
     ((>= i (length map)) 0)
-    ((char-equal (aref map i) #\.) (count-arrangements-2 map numbers (1+ i)))
+    ((char-equal (aref map i) #\.) (count-arrangements-2-uncached map numbers (1+ i)))
     (t
      (+ (if (can-place-here map (car numbers) i)
-            (count-arrangements-2 map
-                                  (cdr numbers)
-                                  (+ 1 i (car numbers)))
+            (progn
+              ;; (format t "Placing at ~a~%" i)
+              (count-arrangements-2-uncached map
+                                             (cdr numbers)
+                                             (+ 1 i (car numbers))))
             0)
         (if (char-equal (aref map i) #\?)
-            (count-arrangements-2 map
-                                  numbers
-                                  (1+ i))
+            (count-arrangements-2-uncached map
+                                           numbers
+                                           (1+ i))
             0)))))
 
-(defun count-arrangements (map numbers i)
-  ;; (format t "(list numbers i): ~a~%" (list numbers i))
+(defvar arrangements nil)
+
+(defun count-arrangements-2-list (map numbers i acc)
+  (format t "(list map numbers i acc): ~a~%" (list map numbers i acc))
   (cond
-    ((null numbers) 1)
+    ((null numbers) (if (and (< i (length map))
+                             (find #\# map :start i))
+                        0
+                        (progn (push (reverse acc) arrangements) 1)))
     ((>= i (length map)) 0)
-    ((char-equal (aref map i) #\.) (count-arrangements map numbers (1+ i)))
-    (t (bind (((next . rest) numbers)
-              ((len . end) (length-of-next-run map i)))
-         ;; (format t "(list len end): ~a~%" (list len end))
-         (cond
-           ((> next (- (length map) i)) 0)
-           ((= len next)
-            (count-arrangements map rest (1+ end)))
-           (t (bind ((available (available-length map i)))
-                ;; (format t "available: ~a~%" available)
-                (iter
-                  (for spot from i below (+ end available))
-                  (for remaining downfrom available)
-                  ;; (format t "(list spot remaining): ~a~%" (list spot remaining))
-                  (summing (if (and (>= (+ len remaining) next)
-                                    (or (>= (+ spot next) (length map))
-                                        (not (char-equal #\# (aref map (+ spot next))))))
-                               (count-arrangements map rest (1+ (+ spot next)))
-                               0))))))))) )
+    ((char-equal (aref map i) #\.) (count-arrangements-2-list map numbers (1+ i) acc))
+    (t
+     (+ (if (can-place-here map (car numbers) i)
+            (progn
+              (format t "Placing at ~a~%" i)
+              (count-arrangements-2-list map
+                                         (cdr numbers)
+                                         (+ 1 i (car numbers))
+                                         (cons i acc)))
+            0)
+        (if (char-equal (aref map i) #\?)
+            (count-arrangements-2-list map
+                                       numbers
+                                       (1+ i)
+                                       acc)
+            0)))))
 
 (defun part-1 ()
-  (bind ((problem (read-problem))
-         (seen (make-hash-table)))
+  (bind ((problem (read-problem)))
     (iter
       (for (map . numbers) in problem)
-      (summing (count-arrangements-2 map numbers 0)))))
+      ;; (format t "(list map numbers): ~a~%" (list map numbers))
+      (summing (bind ((seen (make-hash-table :test #'equal)))
+                 (count-arrangements-2 map numbers 0))))))
 
-;; Wrong: 8337
-;; Wrong: 8345
+(defun duplicate (input)
+  (bind (((map . numbers) input))
+    (iter
+      (for i from 0 below 5)
+      (collecting map into maps)
+      (when (/= i 4)
+        (collecting "?" into maps))
+      (collecting numbers into numberss)
+      (finally
+       (return (cons (apply #'concatenate 'string maps)
+                     (apply #'concatenate 'list numberss)))))))
 
 (defun part-2 ()
-  (bind ((problem (read-problem)))
-    ))
+  (bind ((problem (mapcar #'duplicate (read-problem))))
+    (iter
+      (for (map . numbers) in problem)
+      (print "tick")
+      (summing (bind ((seen (make-hash-table :test #'equal)))
+                 (count-arrangements-2 map numbers 0))))))
