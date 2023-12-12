@@ -41,7 +41,6 @@
 (defvar seen nil)
 
 (defun count-arrangements-2 (map numbers i)
-  ;; (format t "(list map numbers i): ~a~%" (list map numbers i))
   (or #1=(gethash (cons i numbers) seen)
       (setf #1# (cond
                   ((null numbers) (if (and (< i (length map))
@@ -53,7 +52,6 @@
                   (t
                    (+ (if (can-place-here map (car numbers) i)
                           (progn
-                            ;; (format t "Placing at ~a~%" i)
                             (count-arrangements-2 map
                                                   (cdr numbers)
                                                   (+ 1 i (car numbers))))
@@ -64,33 +62,10 @@
                                                 (1+ i))
                           0)))))))
 
-(defun count-arrangements-2-uncached (map numbers i)
-  ;; (format t "(list map numbers i): ~a~%" (list map numbers i))
-  (cond
-    ((null numbers) (if (and (< i (length map))
-                             (find #\# map :start i))
-                        0
-                        1))
-    ((>= i (length map)) 0)
-    ((char-equal (aref map i) #\.) (count-arrangements-2-uncached map numbers (1+ i)))
-    (t
-     (+ (if (can-place-here map (car numbers) i)
-            (progn
-              ;; (format t "Placing at ~a~%" i)
-              (count-arrangements-2-uncached map
-                                             (cdr numbers)
-                                             (+ 1 i (car numbers))))
-            0)
-        (if (char-equal (aref map i) #\?)
-            (count-arrangements-2-uncached map
-                                           numbers
-                                           (1+ i))
-            0)))))
-
+;; To see the arrangements...
 (defvar arrangements nil)
 
 (defun count-arrangements-2-list (map numbers i acc)
-  (format t "(list map numbers i acc): ~a~%" (list map numbers i acc))
   (cond
     ((null numbers) (if (and (< i (length map))
                              (find #\# map :start i))
@@ -101,7 +76,6 @@
     (t
      (+ (if (can-place-here map (car numbers) i)
             (progn
-              (format t "Placing at ~a~%" i)
               (count-arrangements-2-list map
                                          (cdr numbers)
                                          (+ 1 i (car numbers))
@@ -118,7 +92,6 @@
   (bind ((problem (read-problem)))
     (iter
       (for (map . numbers) in problem)
-      ;; (format t "(list map numbers): ~a~%" (list map numbers))
       (summing (bind ((seen (make-hash-table :test #'equal)))
                  (count-arrangements-2 map numbers 0))))))
 
@@ -138,6 +111,5 @@
   (bind ((problem (mapcar #'duplicate (read-problem))))
     (iter
       (for (map . numbers) in problem)
-      (print "tick")
       (summing (bind ((seen (make-hash-table :test #'equal)))
                  (count-arrangements-2 map numbers 0))))))
