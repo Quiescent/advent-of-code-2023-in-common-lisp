@@ -66,3 +66,51 @@
          (for i from 1)
          (for (label . lense) in lenses)
          (summing (* (1+ box-idx) i lense)))))))
+
+;; Purely functional solution for fun.
+
+(defun power-in-box (initial-lenses box-idx)
+  (labels ((recur (acc lenses i)
+             (if (empty? lenses)
+                 acc
+                 (recur (+ acc (* (1+ box-idx)
+                                  i
+                                  (cdr (first lenses))))
+                        (less-first lenses)
+                        (1+ i)))))
+    (recur 0 initial-lenses 1)))
+
+(defun compute-power (boxes)
+  (reduce (lambda (acc key box)
+            (+ (power-in-box box key)
+               acc))
+          boxes
+          :initial-value 0))
+
+(defun part-2-pf ()
+  (bind ((problem (read-problem)))
+    (labels ((recur (boxes instructions)
+               (if (null instructions)
+                   (compute-power boxes)
+                   (bind (((instruction . rest) instructions)
+                          (label-op (match instruction
+                                      ((ppcre "([a-z]+)=([0-9]+)"
+                                              label
+                                              (read lense))
+                                       (cons label lense))
+                                      ((ppcre "([a-z]+)-"
+                                              label)
+                                       (cons label '-))))
+                          ((label . op) label-op)
+                          (box-idx (hash label))
+                          (lenses (@ boxes box-idx))
+                          (existing-lense-position (position label lenses :key #'car :test #'equal)))
+                     (recur (with boxes
+                                  box-idx
+                                  (cond
+                                    ((eq op '-) (remove label lenses :key #'car :test #'equal))
+                                    (existing-lense-position
+                                     (with lenses existing-lense-position label-op))
+                                    (t (with-last lenses label-op))))
+                            rest)))))
+      (recur (empty-map (empty-seq)) problem))))
