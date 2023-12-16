@@ -1,16 +1,5 @@
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defun shadowing-import-from-fset ()
-    `(:shadowing-import-from
-     :fset
-      ,@(let ((symbols nil))
-        (do-external-symbols (symbol (find-package 'fset) symbols)
-          (push symbol symbols))))))
-
 (defpackage all
-  (:use :cl :iterate :cl-ppcre :metabang-bind :trivia :trivia.ppcre)
-  #.(shadowing-import-from-fset)
-  (:shadowing-import-from :arrow-macros :->>)
-  (:shadowing-import-from :arrow-macros :->))
+  (:use :cl :iterate :cl-ppcre :metabang-bind :trivia :trivia.ppcre))
 (in-package all)
 
 (defun main ()
