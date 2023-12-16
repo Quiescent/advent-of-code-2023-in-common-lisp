@@ -519,7 +519,6 @@
       (for y from 0 below (length problem))
       (iter
         (for x from 0 below (length (aref problem 0)))
-        (format t "(cons x y): ~a~%" (cons x y))
         (when (and (not (contains? inside  (cons x y)))
                    (not (contains? outside (cons x y)))
                    (not (contains? loop (cons x y))))
@@ -533,5 +532,4 @@
             (if is-inside
                 (setf inside  (union (set-difference inside loop) tiles))
                 (setf outside (union (set-difference outside loop) tiles)))))))
-    (format t "inside: ~a~%" inside)
     (size inside)))

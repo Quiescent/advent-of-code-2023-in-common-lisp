@@ -24,7 +24,6 @@
                             (winning-nums (convert 'set (->> (format nil "(~a)" raw-winning-nums) read-from-string)))
                             (my-nums (convert 'seq (->> (format nil "(~a)" raw-mine) read-from-string)))
                             (matching-size (size (filter (lambda (my-num) (contains? winning-nums my-num)) my-nums))))
-                       (print card-id)
                        (if (> matching-size 0)
                            (recur (+ acc (expt 2 (1- matching-size))))
                            (recur acc)))))))

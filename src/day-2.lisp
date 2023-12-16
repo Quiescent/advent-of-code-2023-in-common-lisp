@@ -27,7 +27,7 @@
                                                ((string-equal colour "red")   (> (read-from-string num) 12))
                                                ((string-equal colour "green") (> (read-from-string num) 13))
                                                ((string-equal colour "blue")  (> (read-from-string num) 14))))))
-                                (print counts-per-round)))
+                                counts-per-round))
                      (->> (split " " game)
                        cadr
                        read-from-string)
