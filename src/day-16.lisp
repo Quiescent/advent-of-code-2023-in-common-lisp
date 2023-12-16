@@ -28,6 +28,10 @@
 (defvar up #c(0 -1))
 (defvar up-down    (list up down))
 (defvar left-right (list left right))
+(defvar left-list (list left))
+(defvar right-list (list right))
+(defvar down-list (list down))
+(defvar up-list (list up))
 
 (defun interact (direction tile)
   (case tile
@@ -39,41 +43,43 @@
              left-right
              (list direction)))
     (#\/ (cond
-           ((eq direction right) (list up))
-           ((eq direction left) (list down))
-           ((eq direction up) (list right))
-           ((eq direction down) (list left))))
+           ((eq direction right) up-list)
+           ((eq direction left) down-list)
+           ((eq direction up) right-list)
+           ((eq direction down) left-list)))
     (#\\ (cond
-           ((eq direction right) (list down))
-           ((eq direction left) (list up))
-           ((eq direction up) (list left))
-           ((eq direction down) (list right))))))
+           ((eq direction right) down-list)
+           ((eq direction left) up-list)
+           ((eq direction up) left-list)
+           ((eq direction down) right-list)))))
 
 (defun grid-at (grid c)
   (-> (aref grid (imagpart c))
     (aref (realpart c))))
 
-(defun in-bounds (position grid)
-  (and (not (< (realpart position) 0))
-       (not (< (imagpart position) 0))
-       (not (>= (realpart position) (length (aref grid 0))))
-       (not (>= (imagpart position) (length grid)))))
-
 (defun trace-beam (grid initial-position initial-direction)
-  (bind ((seen (make-hash-table :test #'equal)))
-    (labels ((recur (position direction)
+  (bind ((seen (make-hash-table :test #'equal))
+         (x-len (length (aref grid 0)))
+         (y-len (length grid)))
+    (labels ((in-bounds (position)
+               (bind ((x (realpart position))
+                      (y (imagpart position)))
+                 (and (not (< x 0))
+                      (not (< y 0))
+                      (not (>= x x-len))
+                      (not (>= y y-len)))))
+             (recur (position direction)
                (bind ((new-position (+ position direction)))
-                 (when (in-bounds new-position grid)
+                 (when (in-bounds new-position)
                    (bind ((tile (grid-at grid new-position))
                           (new-directions (interact direction tile)))
                      (iter
                        (for new-direction in new-directions)
-                       (when #1=(gethash (cons new-position new-direction) seen)
-                             (next-iteration))
-                       
-                       (setf #1# t)
+                       (when (member new-direction #1=(gethash new-position seen))
+                         (next-iteration))
+                       (push new-direction #1#)
                        (recur new-position new-direction)))))))
-      (setf (gethash (cons initial-position initial-direction) seen) t)
+      (push initial-direction (gethash initial-position seen))
       (iter
         (for new-direction in (interact initial-direction (grid-at grid initial-position)))
         (recur initial-position new-direction))
@@ -81,20 +87,14 @@
 
 (defun part-1 ()
   (bind ((problem (read-problem)))
-    (->> (iter
-           (for (key value) in-hashtable (trace-beam problem #c(0 0) right))
-           (collecting (car key)))
-      remove-duplicates
-      length)))
+    (->> (trace-beam problem #c(0 0) right)
+      hash-table-count)))
 
 (defun energized-tiles (grid initial-position initial-direction)
-  (->> (iter
-         (for (key value) in-hashtable (trace-beam grid
-                                                   initial-position
-                                                   initial-direction))
-         (collecting (car key)))
-    remove-duplicates
-    length))
+  (->> (trace-beam grid
+                   initial-position
+                   initial-direction)
+    hash-table-count))
 
 (defun part-2 ()
   (bind ((problem (read-problem)))
