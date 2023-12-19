@@ -476,178 +476,91 @@
        (prange-size a-range)
        (prange-size s-range))))
 
-;; IntervalMap is
-;; ((prange . IntervalMap|Number))
+#+nil
+(setf *mytree* (interval:make-tree :interval-before-p #'my-interval<
+                                   :interval-equal-p #'my-interval=
+                                   :value-before-p #'char<=))
 
-(defstruct part-interval
-  (range (make-prange :start 0 :end 0) :type prange)
-  (value nil))
+#+nil
+(interval:insert *mytree* (make-my-interval :start #\a :end #\c))
+#+nil
+(interval:insert *mytree* (make-my-interval :start #\b :end #\m))
 
-(defun interval-map-insert (map remaining-dimensions)
-  (format t "insert: ~a~%" remaining-dimensions)
-  (if (null remaining-dimensions)
-      (if (numberp map) (1+ map) 1)
-      (bind (((to-insert . rest) remaining-dimensions))
-        (if (null map)
-            (list (make-part-interval
-                   :range to-insert
-                   :value (interval-map-insert nil rest)))
-            (bind ((intersected nil)
-                   (new-map
-                    (iter
-                      (for maps on map)
-                      (with-slots (range value) (car maps)
-                        (with-slots (start end) range
-                          (cond
-                            ;; The thing we're inserting starts before the next
-                            ;; range, and intersects and terminates in it.
-                            ((and (< (prange-start to-insert) start)
-                                  (>= (prange-end to-insert) start)
-                                  (< (prange-end to-insert) end))
-                             (progn
-                               (print 1)
-                               (setf intersected t)
-                               (when (and (/= (prange-start to-insert) start)
-                                          (/= 1 start))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start (prange-start to-insert)
-                                           :end (1- start))
-                                   :value (interval-map-insert nil rest))))
-                               (collecting
-                                (make-part-interval
-                                 :range (make-prange
-                                         :start start
-                                         :end (prange-end to-insert))
-                                 :value (interval-map-insert value rest)))
-                               (when (and (/= start 4000)
-                                          (/= (1+ (prange-end to-insert)) end))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start (1+ (prange-end to-insert))
-                                           :end end)
-                                   :value value)))
-                               (appending (cdr maps))
-                               (finish)))
+#+nil
+(interval:find *mytree* '(#\a . #\c))
+  ;; => (#<a-c>)
 
-                            ;; The thing we're inserting starts in the next
-                            ;; range and goes off the right end.
-                            ((and (>= (prange-start to-insert) start)
-                                  (<= (prange-start to-insert) end)
-                                  (> (prange-end to-insert) end))
-                             (progn
-                               (print 2)
-                               (setf intersected t)
-                               (when (and (/= 1 (prange-start to-insert))
-                                          (/= start (prange-start to-insert)))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start start
-                                           :end (1- (prange-start to-insert)))
-                                   :value value)))
-                               (collecting
-                                (make-part-interval
-                                 :range (make-prange
-                                         :start (prange-start to-insert)
-                                         :end end)
-                                 :value (interval-map-insert value rest)))
-                               ;; Leave this to be inserted.
-                               (if (and (= end 4000)
-                                        (/= end (prange-end to-insert)))
-                                   (finish)
-                                   (setf to-insert (make-prange
-                                                    :start (1+ end)
-                                                    :end (prange-end to-insert))))))
+#+nil
+(interval:find-all *mytree* #\b)  
+  ;; => (#<a-c> #<b-m>)
 
-                            ;; The thing we're inserting starts before and ends
-                            ;; after
-                            ((and (<= (prange-start to-insert) start)
-                                  (>= (prange-end to-insert) end))
-                             (progn
-                               (print 3)
-                               (setf intersected t)
-                               (when (and (/= start 1)
-                                          (/= (prange-start to-insert) start))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start (prange-start to-insert)
-                                           :end (1- start))
-                                   :value (interval-map-insert nil rest))))
-                               (collecting
-                                (make-part-interval
-                                 :range (make-prange
-                                         :start start
-                                         :end end)
-                                 :value (interval-map-insert value rest)))
-                               ;; Leave the rest to be inserted.
-                               (if (and (= end 4000)
-                                        (/= end (prange-end to-insert)))
-                                   (finish)
-                                   (setf to-insert (make-prange
-                                                    :start (1+ end)
-                                                    :end (prange-end to-insert))))))
+#+nil
+(setf (my-interval-my-data (interval:find *mytree* '(#\a . #\c)))
+      "something useful for later retrieval")
 
-                            ;; The thing we're inserting is *inside* the next range
-                            ((and (>= (prange-start to-insert) start)
-                                  (<= (prange-start to-insert) end))
-                             (progn
-                               (print 3)
-                               (setf intersected t)
-                               (when (and (/= (prange-start to-insert) 1)
-                                          (/= (prange-start to-insert) start))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start start
-                                           :end (1- (prange-start to-insert)))
-                                   :value value)))
-                               (collecting
-                                (make-part-interval
-                                 :range (make-prange
-                                         :start (prange-start to-insert)
-                                         :end (prange-end to-insert))
-                                 :value (interval-map-insert value rest)))
-                               (when (and (/= (prange-end to-insert) 4000)
-                                          (/= (prange-end to-insert) end))
-                                 (collecting
-                                  (make-part-interval
-                                   :range (make-prange
-                                           :start (1+ (prange-end to-insert))
-                                           :end end)
-                                   :value value)))
-                               (appending (cdr maps))
-                               (finish)))))))))
-              (when (not intersected)
-                (setf new-map (append new-map (list (make-part-interval
-                                                     :range to-insert
-                                                     :value (interval-map-insert
-                                                             nil
-                                                             rest))))))
-              new-map)))))
+#+nil
+(mapcar #'my-interval-my-data (interval:find-all *mytree* #\b))
+
+(defstruct (my-interval (:include interval:interval))
+  my-data)
+
+(defun my-interval< (i1 i2)
+  (< (interval:interval-start i1) (interval:interval-start i2)))
+
+(defun my-interval= (i1 i2)
+  (and (= (interval:interval-start i1) (interval:interval-start i2))
+       (= (interval:interval-end i1) (interval:interval-end i2))))
+
+(defun make-tree ()
+  (interval:make-tree :interval-before-p #'my-interval<
+                      :interval-equal-p #'my-interval=
+                      :value-before-p #'<=))
+
+(defun interval-map-insert (map dimensions)
+  ;; (format t "(list map dimensions): ~a~%" (list map dimensions))
+  (if (null dimensions)
+      t
+      (bind (((next . remaining) dimensions))
+        (when (null map)
+          (setf map (make-tree)))
+        (with-slots (start end) next
+          (bind ((this-interval (make-my-interval :start start :end end)))
+            (interval:insert map this-interval)
+            (iter
+              (for range in (interval:find-all map this-interval))
+              (setf (my-interval-my-data (interval:find map this-interval))
+                    (interval-map-insert (my-interval-my-data (interval:find map range))
+                                         remaining)))))
+        map)))
 
 (defun insert-all (ranges)
-  (bind ((map nil))
+  (bind ((map (make-tree)))
     (iter
       (for range in ranges)
       (with-slots (x-range m-range a-range s-range) range
         (bind ((dimensions (list x-range m-range a-range s-range)))
-          (setf map (interval-map-insert map dimensions))))
-      (format t "tick~%"))
+          (setf map (interval-map-insert map dimensions)))))
     map))
 
 (defun map-size (map)
-  (if (numberp map)
-      map
+  (if (eq t map)
+      1
       (iter
-        (for (p-range p-interval) in-hashtable map)
-        (with-slots (range value) p-interval
-          (with-slots (start end) range
-            (summing (* (1+ (- end start))
-                        (map-size value))))))))
+        (for range in (interval:find-all map (make-my-interval :start 1 :end 4000)))
+        (bind ((start (interval:interval-start range))
+               (end (interval:interval-end range)))
+          (summing (* (1+ (- end start))
+                      (map-size (my-interval-my-data (interval:find map range)))))))))
+
+(defun total-intersecting (ranges-start)
+  (labels ((recur (ranges)
+             (if (null ranges)
+                 0
+                 (bind (((current . rest) ranges))
+                   (iter
+                     (for other-range in rest)
+                     ())))))
+    (recur ranges-start)))
 
 (defun part-2 (&optional (file-relative-path "src/day-19.in"))
   (bind (((rules . parts) (read-problem-2 file-relative-path))
@@ -658,15 +571,16 @@
                        (mapcar #'car)
                        (mapcar #'ranges)
                        (mapcar #'car)))
-         (map (insert-all (subseq all-ranges 0 2))))
+         (map (insert-all (subseq all-ranges 0)))
+         )
     (declare (ignore parts))
     ;; (format t "map: ~a~%" map)
     ;; (format t "all-ranges: ~a~%" all-ranges)
     ;; (format t "terminal: ~a~%" (nth 4 terminals))
     ;; (ranges (car (trace-back (nth 4 terminals) rules)))
     ;; (apply #'+ (mapcar #'part-range-size intersected))
-    ;; (map-size map)
-    map
+    all-ranges
+    
     ))
 
 (defun test-2 ()
