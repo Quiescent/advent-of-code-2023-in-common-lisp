@@ -486,55 +486,44 @@
 (defun interval-map-insert (map remaining-dimensions)
   (format t "insert: ~a~%" remaining-dimensions)
   (if (null remaining-dimensions)
-      t
+      (if (numberp map) (1+ map) 1)
       (bind (((to-insert . rest) remaining-dimensions))
         (if (null map)
             (list (make-part-interval
                    :range to-insert
                    :value (interval-map-insert nil rest)))
-            (bind ((still-to-insert (list to-insert)))
-              (iter outer
-                (while still-to-insert)
-                (format t "still-to-insert: ~a~%" still-to-insert)
-                ;; (format t "map: ~a~%" map)
-                (for to-insert-inner = (pop still-to-insert))
-                (for inserted = (iter
-                                  (for p-interval in map)
-                                  (with-slots (range value) p-interval
-                                    (bind (((overlap . non-overlaps) (prange-intersect-with-2 range
-                                                                                              to-insert-inner)))
-                                      (when overlap
-                                        (collecting (make-part-interval
-                                                     :range overlap
-                                                     :value (interval-map-insert value rest)))
-                                        (when non-overlaps
-                                          (setf still-to-insert (remove-duplicates (append still-to-insert
-                                                                                           non-overlaps)
-                                                                                   :test #'equal)))
-                                        (return t))))))
-                (when (print (not inserted))
-                  (iter
-                    (for non-overlap in still-to-insert)
-                    (in outer
-                        (collecting (make-part-interval
-                                     :range non-overlap
-                                     :value (interval-map-insert nil rest)))))
-                  (finish))
-                ))))))
+            (bind ((intersected nil)
+                   (with-intersections
+                       (iter
+                         (for p-interval in map)
+                         (with-slots (range value) p-interval
+                           (bind (((overlap . non-overlaps) (prange-intersect-with-2 to-insert range)))
+                             (declare (ignore non-overlaps))
+                             (when overlap
+                               (collecting (make-part-interval
+                                            :range overlap
+                                            :value (interval-map-insert value rest)))
+                               (setf intersected t)))))))
+              (if (not intersected)
+                  (cons (make-part-interval
+                         :range to-insert
+                         :value (interval-map-insert nil rest))
+                        with-intersections)
+                  with-intersections))))))
 
 (defun insert-all (ranges)
   (bind ((map nil))
     (iter
-      (print "tick")
       (for range in ranges)
       (with-slots (x-range m-range a-range s-range) range
         (bind ((dimensions (list x-range m-range a-range s-range)))
-          (setf map (interval-map-insert map dimensions)))))
+          (setf map (interval-map-insert map dimensions))))
+      (format t "tick~%"))
     map))
 
 (defun map-size (map)
-  (if (eq map t)
-      1
+  (if (numberp map)
+      map
       (iter
         (for p-interval in map)
         (with-slots (range value) p-interval
@@ -553,8 +542,8 @@
                        (mapcar #'car)))
          (map (insert-all (subseq all-ranges 0))))
     (declare (ignore parts))
-    (format t "map: ~a~%" map)
-    (format t "all-ranges: ~a~%" all-ranges)
+    ;; (format t "map: ~a~%" map)
+    ;; (format t "all-ranges: ~a~%" all-ranges)
     ;; (format t "terminal: ~a~%" (nth 4 terminals))
     ;; (ranges (car (trace-back (nth 4 terminals) rules)))
     ;; (apply #'+ (mapcar #'part-range-size intersected))
