@@ -477,7 +477,7 @@
        (prange-size s-range))))
 
 ;; IntervalMap is
-;; Hashmap: prange -> IntervalMap|Number
+;; ((prange . IntervalMap|Number))
 
 (defstruct part-interval
   (range (make-prange :start 0 :end 0) :type prange)
@@ -488,53 +488,149 @@
   (if (null remaining-dimensions)
       (if (numberp map) (1+ map) 1)
       (bind (((to-insert . rest) remaining-dimensions))
-        (if (= (hash-table-count map) 0)
-            (bind ((new-map (make-hash-table :test #'equal)))
-              (setf (gethash to-insert new-map)
-                    (make-part-interval
-                     :range to-insert
-                     :value (interval-map-insert (make-hash-table :test #'equal)
-                                                 rest)))
-              new-map)
-            (bind ((new-map (make-hash-table :test #'equal)))
-              (labels ((recur (next-to-insert)
-                         (if (null next-to-insert)
-                             new-map
-                             (bind ((overlapped nil)
-                                    ((next . other-non-overlaps) next-to-insert)
-                                    (still-to-insert
-                                     (iter
-                                       (for (p-range p-interval)
-                                            :in-hashtable map)
-                                       (with-slots (range value) p-interval
-                                         (bind (((overlap . non-overlaps)
-                                                 (prange-intersect-with-2
-                                                  to-insert
-                                                  range)))
-                                           (declare (ignore non-overlaps))
-                                           (when overlap
-                                             (setf overlapped t)
-                                             (setf (gethash overlap new-map)
-                                                   (make-part-interval
-                                                    :range overlap
-                                                    :value (interval-map-insert value rest))))
-                                           (when non-overlaps
-                                             (appending non-overlaps)))))))
-                               (if (not overlapped)
-                                   (iter
-                                     (for non-overlap in still-to-insert)
-                                     (setf (gethash non-overlap new-map)
-                                           (make-part-interval
-                                            :range non-overlap
-                                            :value (interval-map-insert
-                                                    (make-hash-table :test #'equal)
-                                                    rest))))
-                                   (recur still-to-insert))))))
-                (recur (list p-interval)))
+        (if (null map)
+            (list (make-part-interval
+                   :range to-insert
+                   :value (interval-map-insert nil rest)))
+            (bind ((intersected nil)
+                   (new-map
+                    (iter
+                      (for maps on map)
+                      (with-slots (range value) (car maps)
+                        (with-slots (start end) range
+                          (cond
+                            ;; The thing we're inserting starts before the next
+                            ;; range, and intersects and terminates in it.
+                            ((and (< (prange-start to-insert) start)
+                                  (>= (prange-end to-insert) start)
+                                  (< (prange-end to-insert) end))
+                             (progn
+                               (print 1)
+                               (setf intersected t)
+                               (when (and (/= (prange-start to-insert) start)
+                                          (/= 1 start))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start (prange-start to-insert)
+                                           :end (1- start))
+                                   :value (interval-map-insert nil rest))))
+                               (collecting
+                                (make-part-interval
+                                 :range (make-prange
+                                         :start start
+                                         :end (prange-end to-insert))
+                                 :value (interval-map-insert value rest)))
+                               (when (and (/= start 4000)
+                                          (/= (1+ (prange-end to-insert)) end))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start (1+ (prange-end to-insert))
+                                           :end end)
+                                   :value value)))
+                               (appending (cdr maps))
+                               (finish)))
+
+                            ;; The thing we're inserting starts in the next
+                            ;; range and goes off the right end.
+                            ((and (>= (prange-start to-insert) start)
+                                  (<= (prange-start to-insert) end)
+                                  (> (prange-end to-insert) end))
+                             (progn
+                               (print 2)
+                               (setf intersected t)
+                               (when (and (/= 1 (prange-start to-insert))
+                                          (/= start (prange-start to-insert)))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start start
+                                           :end (1- (prange-start to-insert)))
+                                   :value value)))
+                               (collecting
+                                (make-part-interval
+                                 :range (make-prange
+                                         :start (prange-start to-insert)
+                                         :end end)
+                                 :value (interval-map-insert value rest)))
+                               ;; Leave this to be inserted.
+                               (if (and (= end 4000)
+                                        (/= end (prange-end to-insert)))
+                                   (finish)
+                                   (setf to-insert (make-prange
+                                                    :start (1+ end)
+                                                    :end (prange-end to-insert))))))
+
+                            ;; The thing we're inserting starts before and ends
+                            ;; after
+                            ((and (<= (prange-start to-insert) start)
+                                  (>= (prange-end to-insert) end))
+                             (progn
+                               (print 3)
+                               (setf intersected t)
+                               (when (and (/= start 1)
+                                          (/= (prange-start to-insert) start))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start (prange-start to-insert)
+                                           :end (1- start))
+                                   :value (interval-map-insert nil rest))))
+                               (collecting
+                                (make-part-interval
+                                 :range (make-prange
+                                         :start start
+                                         :end end)
+                                 :value (interval-map-insert value rest)))
+                               ;; Leave the rest to be inserted.
+                               (if (and (= end 4000)
+                                        (/= end (prange-end to-insert)))
+                                   (finish)
+                                   (setf to-insert (make-prange
+                                                    :start (1+ end)
+                                                    :end (prange-end to-insert))))))
+
+                            ;; The thing we're inserting is *inside* the next range
+                            ((and (>= (prange-start to-insert) start)
+                                  (<= (prange-start to-insert) end))
+                             (progn
+                               (print 3)
+                               (setf intersected t)
+                               (when (and (/= (prange-start to-insert) 1)
+                                          (/= (prange-start to-insert) start))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start start
+                                           :end (1- (prange-start to-insert)))
+                                   :value value)))
+                               (collecting
+                                (make-part-interval
+                                 :range (make-prange
+                                         :start (prange-start to-insert)
+                                         :end (prange-end to-insert))
+                                 :value (interval-map-insert value rest)))
+                               (when (and (/= (prange-end to-insert) 4000)
+                                          (/= (prange-end to-insert) end))
+                                 (collecting
+                                  (make-part-interval
+                                   :range (make-prange
+                                           :start (1+ (prange-end to-insert))
+                                           :end end)
+                                   :value value)))
+                               (appending (cdr maps))
+                               (finish)))))))))
+              (when (not intersected)
+                (setf new-map (append new-map (list (make-part-interval
+                                                     :range to-insert
+                                                     :value (interval-map-insert
+                                                             nil
+                                                             rest))))))
               new-map)))))
 
 (defun insert-all (ranges)
-  (bind ((map (make-hash-table :test #'equal)))
+  (bind ((map nil))
     (iter
       (for range in ranges)
       (with-slots (x-range m-range a-range s-range) range
@@ -562,7 +658,7 @@
                        (mapcar #'car)
                        (mapcar #'ranges)
                        (mapcar #'car)))
-         (map (insert-all (subseq all-ranges 0))))
+         (map (insert-all (subseq all-ranges 0 2))))
     (declare (ignore parts))
     ;; (format t "map: ~a~%" map)
     ;; (format t "all-ranges: ~a~%" all-ranges)
