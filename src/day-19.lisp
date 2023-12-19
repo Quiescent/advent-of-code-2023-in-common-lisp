@@ -329,61 +329,95 @@
                                 ranges)))))
     (recur restrictions-start (list full-part-range))))
 
+(defun remove-invalid (pranges)
+  (remove-if (lambda (range)
+               (with-slots (start end) range
+                 (= start end)))
+             pranges))
+
 (defmethod prange-intersect-with-2 ((pr1 prange) (pr2 prange))
   (bind ((s1 (prange-start pr1))
          (e1 (prange-end pr1))
          (s2 (prange-start pr2))
          (e2 (prange-end pr2)))
-    (cond
-      ;; Contained
-      ((and (>= s1 s2)
-            (<= e1 e2)
-            ;; (print 1)
+    (->> (cond
+           ;; Contained
+           ((and (>= s1 s2)
+                 (<= e1 e2)
+                 ;; (print 1)
+                 )
+            (list pr1
+                  ;; (make-prange
+                  ;;  :start s2
+                  ;;  :end (max 1 (1- s1)))
+                  ;; (make-prange
+                  ;;  :start (min 4000 (1+ e1))
+                  ;;  :end e2)
+                  )
             )
-       (list (make-prange
-              :start s1
-              :end e1)
-             (make-prange
-              :start s2
-              :end (1- s1))
-             (make-prange
-              :start (1+ e1)
-              :end e2)))
 
-      ;; On left
-      ((and (<= s1 s2)
-            (<= e1 e2)
-            ;; (print 2)
-            )
-       (list (make-prange
-              :start s2
-              :end e1)
-             (make-prange
-              :start s1
-              :end (1- s2))))
+           ;; On left
+           ((and (< s1 s2)
+                 (<= e1 e2)
+                 ;; (print 2)
+                 )
+            (remove nil
+                    (list ;; (make-prange
+                          ;;  :start s2
+                          ;;  :end e1)
+                          (make-prange
+                           :start s1
+                           :end (max 1 (1- s2)))
+                          ;; (when (< e1 e2)
+                          ;;   (make-prange
+                          ;;    :start (min 4000 (1+ e1))
+                          ;;    :end e2))
+                          )))
 
-      ;; On right
-      ((and (<= s1 e2)
-            (>= e1 e2)
-            ;; (print 3)
-            )
-       (list (make-prange
-              :start s1
-              :end e2)
-             (make-prange
-              :start s2
-              :end (1- e2))))
+           ;; On right
+           ((and (<= s1 e2)
+                 (> e1 e2)
+                 ;; (print 3)
+                 )
+            (remove nil (list
+                         ;; (when (> s1 s2)
+                         ;;   (make-prange
+                         ;;    :start s2
+                         ;;    :end (max 1 (1- s1))))
+                         ;; (make-prange
+                         ;;  :start s1
+                         ;;  :end e2)
+                         (make-prange
+                          :start (min 4000 (1+ e2))
+                          :end e1))))
 
-      ;; Contains
-      ((and (< s1 s2)
-            (> e1 e2)
-            ;; (print 4)
-            )
-       (list (make-prange
-              :start s2
-              :end e2)))
+           ;; Contains
+           ((and (< s1 s2)
+                 (> e1 e2)
+                 ;; (print 4)
+                 )
+            (list (make-prange
+                   :start s1
+                   :end (max 1 (1- s2)))
+                  (make-prange
+                   :start (min 4000 (1+ e2))
+                   :end e1)
+                  ;; pr2
+                  ))
 
-      (t (list pr1 pr2)))))
+           ;; No intersection
+           (t (list pr1)))
+      remove-invalid)))
+
+(defmethod prange-overlaps-p ((pr1 prange) (pr2 prange))
+  (bind ((s1 (prange-start pr1))
+         (e1 (prange-end pr1))
+         (s2 (prange-start pr2))
+         (e2 (prange-end pr2)))
+    (or (and (>= s1 s2)
+             (<= s1 e2))
+        (and (<= e1 e2)
+             (>= e1 s2)))))
 
 (defmethod part-range-intersect-with-2 ((p1 part-range) (p2 part-range))
   (bind ((p1-x (part-range-x-range p1))
@@ -394,32 +428,43 @@
          (p2-m (part-range-m-range p2))
          (p2-a (part-range-a-range p2))
          (p2-s (part-range-s-range p2)))
-   (iter outer
-     (for x-range in (prange-intersect-with-2 p1-x p2-x))
-     (iter
-       (for m-range in (prange-intersect-with-2 p1-m p2-m))
-       (iter
-         (for a-range in (prange-intersect-with-2 p1-a p2-a))
-         (iter
-           (for s-range in (prange-intersect-with-2 p1-s p2-s))
-           (in outer
-               (collecting (make-part-range
-                            :x-range x-range
-                            :m-range m-range
-                            :a-range a-range
-                            :s-range s-range)))))))))
+    (if (and (prange-overlaps-p p1-x p2-x)
+             (prange-overlaps-p p1-m p2-m)
+             (prange-overlaps-p p1-a p2-a)
+             (prange-overlaps-p p1-s p2-s))
+        (progn
+          (format t "Does overlap (list p1 p2): ~a~%" (list p1 p2))
+          (iter outer
+           (for x-range in (prange-intersect-with-2 p1-x p2-x))
+           (iter
+             (for m-range in (prange-intersect-with-2 p1-m p2-m))
+             (iter
+               (for a-range in (prange-intersect-with-2 p1-a p2-a))
+               (iter
+                 (for s-range in (prange-intersect-with-2 p1-s p2-s))
+                 (in outer
+                     (collecting (make-part-range
+                                  :x-range x-range
+                                  :m-range m-range
+                                  :a-range a-range
+                                  :s-range s-range))))))))
+        (list p1))))
 
 (defun intersect-all-ranges (part-ranges)
-  (labels ((recur (intersected ranges)
-             (if (null ranges)
-                 intersected
-                 (bind (((next . rest) ranges))
-                   (recur (mapcan (lambda (range)
-                                    (part-range-intersect-with-2 range next))
-                                  intersected)
-                          rest)))))
-    (recur (list (car part-ranges))
-           (cdr part-ranges))))
+  (bind ((ranges-as-array (coerce part-ranges 'vector)))
+    (iter outer
+      (for i from 0 below (length part-ranges))
+      (bind ((non-intersecting (list (aref ranges-as-array i))))
+        (iter
+          (format t "non-intersecting: ~a~%" non-intersecting)
+          (for j from 0 below (length part-ranges))
+          (for other = (aref ranges-as-array j))
+          (when (/= i j)
+            (setf non-intersecting
+                  (iter
+                    (for outside in non-intersecting)
+                    (appending (part-range-intersect-with-2 outside other))))))
+        (summing (apply #'+ (mapcar #'part-range-size non-intersecting)))))))
 
 (defmethod prange-size ((p prange))
   (with-slots (start end) p
@@ -443,11 +488,11 @@
                        (mapcar #'car)))
          (intersected (intersect-all-ranges all-ranges))
          )
-    ;; (format t "all-ranges: ~a~%" all-ranges)
+    (format t "all-ranges: ~a~%" all-ranges)
     ;; (format t "terminal: ~a~%" (nth 4 terminals))
     ;; (ranges (car (trace-back (nth 4 terminals) rules)))
-    (apply #'+ (mapcar #'part-range-size intersected))
-    ))
+    ;; (apply #'+ (mapcar #'part-range-size intersected))
+    intersected))
 
 (defun test-2 ()
   (part-2 "src/day-19-test.in"))
