@@ -477,6 +477,19 @@
        (prange-size a-range)
        (prange-size s-range))))
 
+;; IntervalMap is
+;;  ((prange . (IntervalMap|prange)))
+
+(defstruct part-interval
+  (range (make-prange :start 0 :end 0) :type prange)
+  (value nil))
+
+(defun interval-map-insert (map remaining-dimensions)
+  (iter
+    (for p-interval in map)
+    (with-slots (range value) p-interval
+      ())))
+
 (defun part-2 (&optional (file-relative-path "src/day-19.in"))
   (bind (((rules . parts) (read-problem-2 file-relative-path))
          (terminals (rules-ending-a rules))
