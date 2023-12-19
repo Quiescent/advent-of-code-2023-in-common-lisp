@@ -488,27 +488,50 @@
   (if (null remaining-dimensions)
       (if (numberp map) (1+ map) 1)
       (bind (((to-insert . rest) remaining-dimensions))
-        (if (null map)
-            (bind ((new-map) (make-hash-table :test #'equal))
+        (if (= (hash-table-count map) 0)
+            (bind ((new-map (make-hash-table :test #'equal)))
               (setf (gethash to-insert new-map)
                     (make-part-interval
                      :range to-insert
-                     :value (interval-map-insert nil rest)))
+                     :value (interval-map-insert (make-hash-table :test #'equal)
+                                                 rest)))
               new-map)
             (bind ((new-map (make-hash-table :test #'equal)))
-              (iter
-                (for (p-interval value) in-hashtable map)
-                (with-slots (range value) p-interval
-                  (bind (((overlap . non-overlaps) (prange-intersect-with-2 to-insert range)))
-                    (when overlap
-                      (setf (gethash overlap new-map)
-                            (make-part-interval
-                             :range overlap
-                             :value (interval-map-insert value rest))))
-                    (when non-overlaps
-                      (iter
-                        (for non-overlap in non-overlaps)
-                        (setf (gethash non-overlap new-map))))))))))))
+              (labels ((recur (next-to-insert)
+                         (if (null next-to-insert)
+                             new-map
+                             (bind ((overlapped nil)
+                                    ((next . other-non-overlaps) next-to-insert)
+                                    (still-to-insert
+                                     (iter
+                                       (for (p-range p-interval)
+                                            :in-hashtable map)
+                                       (with-slots (range value) p-interval
+                                         (bind (((overlap . non-overlaps)
+                                                 (prange-intersect-with-2
+                                                  to-insert
+                                                  range)))
+                                           (declare (ignore non-overlaps))
+                                           (when overlap
+                                             (setf overlapped t)
+                                             (setf (gethash overlap new-map)
+                                                   (make-part-interval
+                                                    :range overlap
+                                                    :value (interval-map-insert value rest))))
+                                           (when non-overlaps
+                                             (appending non-overlaps)))))))
+                               (if (not overlapped)
+                                   (iter
+                                     (for non-overlap in still-to-insert)
+                                     (setf (gethash non-overlap new-map)
+                                           (make-part-interval
+                                            :range non-overlap
+                                            :value (interval-map-insert
+                                                    (make-hash-table :test #'equal)
+                                                    rest))))
+                                   (recur still-to-insert))))))
+                (recur (list p-interval)))
+              new-map)))))
 
 (defun insert-all (ranges)
   (bind ((map (make-hash-table :test #'equal)))
@@ -524,7 +547,7 @@
   (if (numberp map)
       map
       (iter
-        (for p-interval in map)
+        (for (p-range p-interval) in-hashtable map)
         (with-slots (range value) p-interval
           (with-slots (start end) range
             (summing (* (1+ (- end start))
@@ -546,8 +569,9 @@
     ;; (format t "terminal: ~a~%" (nth 4 terminals))
     ;; (ranges (car (trace-back (nth 4 terminals) rules)))
     ;; (apply #'+ (mapcar #'part-range-size intersected))
-    (map-size map)
-    (mapcar #'part-interval-range map)))
+    ;; (map-size map)
+    map
+    ))
 
 (defun test-2 ()
   (part-2 "src/day-19-test.in"))
