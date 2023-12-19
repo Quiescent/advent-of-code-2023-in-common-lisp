@@ -172,7 +172,7 @@
               (thereis (goes-to branch 'a)))
         (collecting rule)))))
 
-(defun all-rules-going-to (rules target-dest)
+(defun rule-going-to (rules target-dest)
   (iter outer
     (for (label rule) in-hashtable rules)
     (with-slots (code) rule
@@ -182,7 +182,7 @@
                            (and (eq (type-of branch) 'literal-comparison)
                                 (with-slots (dest) branch
                                   (eq dest target-dest))))))
-        (collecting rule)))))
+        (return-from outer rule)))))
 
 (defun invert-comparator (comparator)
   (if (eq comparator '>)
@@ -198,44 +198,33 @@
        :amount (if (eq inverted-comparator '<) (1+ amount) (1- amount))
        :dest dest))))
 
-(defun rule-restrictions (rule target-dest)
+(defun rule-restriction (rule target-dest)
   (with-slots (code) rule
-    (bind ((individual-branches (iter
-                                  (for branch in code)
-                                  (when (eq (type-of branch) 'literal-comparison)
-                                    (with-slots (dest comparator amount) branch
-                                      (when (eq dest target-dest)
-                                        (collecting branch)))))))
-      (remove nil
-              (list individual-branches
-                    (when (eq (last code) target-dest)
-                      (iter
-                        (for branch in (butlast code))
-                        (collecting (literal-comparison-invert branch)))))))))
+    (bind ((individual-branch (iter outer
+                                (for branch in code)
+                                (when (eq (type-of branch) 'literal-comparison)
+                                  (with-slots (dest) branch
+                                    (when (eq dest target-dest)
+                                      (return-from outer branch)))))))
+      (or individual-branch
+          (iter
+            (for branch in (butlast code))
+            (collecting (literal-comparison-invert branch)))))))
 
 (defun trace-back (rule rules)
-  (format t "Trace-back rule: ~a~%" rule)
-  (labels ((recur (rule-set from)
-             (format t "Trace-back from: ~a~%" from)
-             (format t "Trace-back rule-set: ~a~%" rule-set)
-             (iter outer
-               (for rule-restrictions in rule-set)
-               (for (current-restrictions . rule) = rule-restrictions)
-               (with-slots (label code) rule
-                 (bind ((restrictions (rule-restrictions rule from)))
-                   (format t "Trace-back restrictions: ~a~%" restrictions)
-                   (iter
-                     (for restriction in restrictions)
-                     (if (eq label 'in)
-                         (in outer (collecting (cons (append restriction current-restrictions) rule)))
-                         (progn
-                           (format t "Trace-back all-rules-going-to ~a: ~a~%" label (all-rules-going-to rules label))
-                           (in outer (appending (recur (mapcar (lambda (source-rule) (cons (append restrictions
-                                                                                                   current-restrictions)
-                                                                                           source-rule))
-                                                               (all-rules-going-to rules label))
-                                                       label)))))))))))
-    (recur (list (cons nil rule)) 'a)))
+  (labels ((recur (rule restrictions)
+             (format t "Trace-back rule: ~a~%" rule)
+             (with-slots (label code) rule
+               (if (eq label 'in)
+                   (cons restrictions rule)
+                   (bind ((coming-from (rule-going-to rules label))
+                          (restriction (rule-restriction coming-from label)))
+                     (format t "Trace-back coming-from: ~a~%" (literal-rule-label coming-from))
+                     (format t "Trace-back restriction: ~a~%" restriction)
+                     (recur coming-from (if (listp restriction)
+                                            (append restriction restrictions)
+                                            (cons restriction restrictions))))))))
+    (recur rule nil)))
 
 ;; Inclusive range
 (defstruct prange
@@ -360,8 +349,8 @@
   (bind (((rules . parts) (read-problem-2 file-relative-path))
          (terminals (rules-ending-a rules)))
     (format t "terminal: ~a~%" (nth 4 terminals))
-    (trace-back (nth 4 terminals) rules)
-    ;; (ranges (caar (trace-back (car terminals) rules)))
+    ;; (trace-back (nth 4 terminals) rules)
+    (ranges (car (trace-back (nth 4 terminals) rules)))
     ))
 
 (defun test-2 ()
