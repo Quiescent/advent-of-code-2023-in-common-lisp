@@ -331,8 +331,9 @@
 
 (defun remove-invalid (pranges)
   (remove-if (lambda (range)
-               (with-slots (start end) range
-                 (= start end)))
+               (or (null range)
+                   (with-slots (start end) range
+                     (= start end))))
              pranges))
 
 (defmethod prange-intersect-with-2 ((pr1 prange) (pr2 prange))
@@ -347,14 +348,12 @@
                  ;; (print 1)
                  )
             (list pr1
-                  ;; (make-prange
-                  ;;  :start s2
-                  ;;  :end (max 1 (1- s1)))
-                  ;; (make-prange
-                  ;;  :start (min 4000 (1+ e1))
-                  ;;  :end e2)
-                  )
-            )
+                  (make-prange
+                   :start s2
+                   :end (max 1 (1- s1)))
+                  (make-prange
+                   :start (min 4000 (1+ e1))
+                   :end e2)))
 
            ;; On left
            ((and (< s1 s2)
@@ -362,16 +361,16 @@
                  ;; (print 2)
                  )
             (remove nil
-                    (list ;; (make-prange
-                          ;;  :start s2
-                          ;;  :end e1)
-                          (make-prange
+                    (list (make-prange
                            :start s1
                            :end (max 1 (1- s2)))
-                          ;; (when (< e1 e2)
-                          ;;   (make-prange
-                          ;;    :start (min 4000 (1+ e1))
-                          ;;    :end e2))
+                          (make-prange
+                           :start s2
+                           :end e1)
+                          (when (< e1 e2)
+                            (make-prange
+                             :start (min 4000 (1+ e1))
+                             :end e2))
                           )))
 
            ;; On right
@@ -380,33 +379,33 @@
                  ;; (print 3)
                  )
             (remove nil (list
-                         ;; (when (> s1 s2)
-                         ;;   (make-prange
-                         ;;    :start s2
-                         ;;    :end (max 1 (1- s1))))
-                         ;; (make-prange
-                         ;;  :start s1
-                         ;;  :end e2)
                          (make-prange
                           :start (min 4000 (1+ e2))
-                          :end e1))))
+                          :end e1)
+                         (when (> s1 s2)
+                           (make-prange
+                            :start s2
+                            :end (max 1 (1- s1))))
+                         (make-prange
+                          :start s1
+                          :end e2))))
 
            ;; Contains
            ((and (< s1 s2)
                  (> e1 e2)
                  ;; (print 4)
                  )
-            (list (make-prange
+            (list pr2
+                  (make-prange
                    :start s1
                    :end (max 1 (1- s2)))
                   (make-prange
                    :start (min 4000 (1+ e2))
                    :end e1)
-                  ;; pr2
                   ))
 
            ;; No intersection
-           (t (list pr1)))
+           (t (list nil pr1)))
       remove-invalid)))
 
 (defmethod prange-overlaps-p ((pr1 prange) (pr2 prange))
@@ -485,10 +484,63 @@
   (value nil))
 
 (defun interval-map-insert (map remaining-dimensions)
-  (iter
-    (for p-interval in map)
-    (with-slots (range value) p-interval
-      ())))
+  (format t "insert: ~a~%" remaining-dimensions)
+  (if (null remaining-dimensions)
+      t
+      (bind (((to-insert . rest) remaining-dimensions))
+        (if (null map)
+            (list (make-part-interval
+                   :range to-insert
+                   :value (interval-map-insert nil rest)))
+            (bind ((still-to-insert (list to-insert)))
+              (iter outer
+                (while still-to-insert)
+                (format t "still-to-insert: ~a~%" still-to-insert)
+                ;; (format t "map: ~a~%" map)
+                (for to-insert-inner = (pop still-to-insert))
+                (for inserted = (iter
+                                  (for p-interval in map)
+                                  (with-slots (range value) p-interval
+                                    (bind (((overlap . non-overlaps) (prange-intersect-with-2 range
+                                                                                              to-insert-inner)))
+                                      (when overlap
+                                        (collecting (make-part-interval
+                                                     :range overlap
+                                                     :value (interval-map-insert value rest)))
+                                        (when non-overlaps
+                                          (setf still-to-insert (remove-duplicates (append still-to-insert
+                                                                                           non-overlaps)
+                                                                                   :test #'equal)))
+                                        (return t))))))
+                (when (print (not inserted))
+                  (iter
+                    (for non-overlap in still-to-insert)
+                    (in outer
+                        (collecting (make-part-interval
+                                     :range non-overlap
+                                     :value (interval-map-insert nil rest)))))
+                  (finish))
+                ))))))
+
+(defun insert-all (ranges)
+  (bind ((map nil))
+    (iter
+      (print "tick")
+      (for range in ranges)
+      (with-slots (x-range m-range a-range s-range) range
+        (bind ((dimensions (list x-range m-range a-range s-range)))
+          (setf map (interval-map-insert map dimensions)))))
+    map))
+
+(defun map-size (map)
+  (if (eq map t)
+      1
+      (iter
+        (for p-interval in map)
+        (with-slots (range value) p-interval
+          (with-slots (start end) range
+            (summing (* (1+ (- end start))
+                        (map-size value))))))))
 
 (defun part-2 (&optional (file-relative-path "src/day-19.in"))
   (bind (((rules . parts) (read-problem-2 file-relative-path))
@@ -499,13 +551,15 @@
                        (mapcar #'car)
                        (mapcar #'ranges)
                        (mapcar #'car)))
-         (intersected (intersect-all-ranges all-ranges))
-         )
+         (map (insert-all (subseq all-ranges 0))))
+    (declare (ignore parts))
+    (format t "map: ~a~%" map)
     (format t "all-ranges: ~a~%" all-ranges)
     ;; (format t "terminal: ~a~%" (nth 4 terminals))
     ;; (ranges (car (trace-back (nth 4 terminals) rules)))
     ;; (apply #'+ (mapcar #'part-range-size intersected))
-    intersected))
+    (map-size map)
+    (mapcar #'part-interval-range map)))
 
 (defun test-2 ()
   (part-2 "src/day-19-test.in"))
