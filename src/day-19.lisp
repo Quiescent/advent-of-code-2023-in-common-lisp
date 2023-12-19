@@ -477,7 +477,7 @@
        (prange-size s-range))))
 
 ;; IntervalMap is
-;;  ((prange . (IntervalMap|prange)))
+;; Hashmap: prange -> IntervalMap|Number
 
 (defstruct part-interval
   (range (make-prange :start 0 :end 0) :type prange)
@@ -486,25 +486,32 @@
 (defun interval-map-insert (map remaining-dimensions)
   (format t "insert: ~a~%" remaining-dimensions)
   (if (null remaining-dimensions)
-      (if (numberp map) (1+ map) 0)
+      (if (numberp map) (1+ map) 1)
       (bind (((to-insert . rest) remaining-dimensions))
         (if (null map)
-            (list (make-part-interval
-                   :range to-insert
-                   :value (interval-map-insert nil rest)))
-            (iter
-              (for p-interval in map)
-              (with-slots (range value) p-interval
-                (bind (((overlap . non-overlaps) (prange-intersect-with-2 to-insert range)))
-                  (declare (ignore non-overlaps))
-                  (when overlap
-                    (collecting (make-part-interval
-                                 :range overlap
-                                 :value (interval-map-insert value rest)))))))))))
+            (bind ((new-map) (make-hash-table :test #'equal))
+              (setf (gethash to-insert new-map)
+                    (make-part-interval
+                     :range to-insert
+                     :value (interval-map-insert nil rest)))
+              new-map)
+            (bind ((new-map (make-hash-table :test #'equal)))
+              (iter
+                (for (p-interval value) in-hashtable map)
+                (with-slots (range value) p-interval
+                  (bind (((overlap . non-overlaps) (prange-intersect-with-2 to-insert range)))
+                    (when overlap
+                      (setf (gethash overlap new-map)
+                            (make-part-interval
+                             :range overlap
+                             :value (interval-map-insert value rest))))
+                    (when non-overlaps
+                      (iter
+                        (for non-overlap in non-overlaps)
+                        (setf (gethash non-overlap new-map))))))))))))
 
 (defun insert-all (ranges)
-  (bind ((map (interval-map-insert nil (list full-prange full-prange full-prange full-prange))))
-    (format t "map: ~a~%" map)
+  (bind ((map (make-hash-table :test #'equal)))
     (iter
       (for range in ranges)
       (with-slots (x-range m-range a-range s-range) range
