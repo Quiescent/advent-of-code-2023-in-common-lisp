@@ -213,14 +213,14 @@
 
 (defun trace-back (rule rules)
   (labels ((recur (rule restrictions)
-             (format t "Trace-back rule: ~a~%" rule)
+             ;; (format t "Trace-back rule: ~a~%" rule)
              (with-slots (label code) rule
                (if (eq label 'in)
                    (cons restrictions rule)
                    (bind ((coming-from (rule-going-to rules label))
                           (restriction (rule-restriction coming-from label)))
-                     (format t "Trace-back coming-from: ~a~%" (literal-rule-label coming-from))
-                     (format t "Trace-back restriction: ~a~%" restriction)
+                     ;; (format t "Trace-back coming-from: ~a~%" (literal-rule-label coming-from))
+                     ;; (format t "Trace-back restriction: ~a~%" restriction)
                      (recur coming-from (if (listp restriction)
                                             (append restriction restrictions)
                                             (cons restriction restrictions))))))))
@@ -310,47 +310,143 @@
       (t (error "No intersection")))))
 
 (defmethod part-range-intersect ((p1 part-range) (p2 part-range))
-  (format t "(list p1 p2): ~a~%" (list p1 p2))
-  (print (make-part-range
-    :x-range (prange-intersect (part-range-x-range p1) (part-range-x-range p2))
-    :m-range (prange-intersect (part-range-m-range p1) (part-range-m-range p2))
-    :a-range (prange-intersect (part-range-a-range p1) (part-range-a-range p2))
-    :s-range (prange-intersect (part-range-s-range p1) (part-range-s-range p2)))))
+  (make-part-range
+   :x-range (prange-intersect (part-range-x-range p1) (part-range-x-range p2))
+   :m-range (prange-intersect (part-range-m-range p1) (part-range-m-range p2))
+   :a-range (prange-intersect (part-range-a-range p1) (part-range-a-range p2))
+   :s-range (prange-intersect (part-range-s-range p1) (part-range-s-range p2))))
 
 (defun ranges (restrictions-start)
-  (format t "restrictions-start: ~a~%" restrictions-start)
+  ;; (format t "restrictions-start: ~a~%" restrictions-start)
   (labels ((recur (restrictions ranges)
-             (format t "(car restrictions): ~a~%" (car restrictions))
-             (format t "ranges: ~a~%" ranges)
-             (cond
-               ((null restrictions) ranges)
-               ((listp (car restrictions))
-                (progn
-                  (print "THERE")
-                  (recur (cdr restrictions)
-                         (mapcar (lambda (range)
-                                   (reduce (lambda (final-range next)
-                                             (format t "final-range: ~a~%" final-range)
-                                             (part-range-intersect final-range
-                                                                   (literal-comparison-to-part-range next)))
-                                           (car restrictions)
-                                           :initial-value range))
-                                 ranges))))
-               (t (progn
-                    (print "HERE")
-                    (recur (cdr restrictions)
-                           (mapcar (lambda (range)
-                                     (part-range-intersect range
-                                                           (literal-comparison-to-part-range (car restrictions))))
-                                   ranges)))))))
+             ;; (format t "(car restrictions): ~a~%" (car restrictions))
+             ;; (format t "ranges: ~a~%" ranges)
+             (if (null restrictions) ranges
+                 (recur (cdr restrictions)
+                        (mapcar (lambda (range)
+                                  (part-range-intersect range
+                                                        (literal-comparison-to-part-range (car restrictions))))
+                                ranges)))))
     (recur restrictions-start (list full-part-range))))
+
+(defmethod prange-intersect-with-2 ((pr1 prange) (pr2 prange))
+  (bind ((s1 (prange-start pr1))
+         (e1 (prange-end pr1))
+         (s2 (prange-start pr2))
+         (e2 (prange-end pr2)))
+    (cond
+      ;; Contained
+      ((and (>= s1 s2)
+            (<= e1 e2)
+            ;; (print 1)
+            )
+       (list (make-prange
+              :start s1
+              :end e1)
+             (make-prange
+              :start s2
+              :end (1- s1))
+             (make-prange
+              :start (1+ e1)
+              :end e2)))
+
+      ;; On left
+      ((and (<= s1 s2)
+            (<= e1 e2)
+            ;; (print 2)
+            )
+       (list (make-prange
+              :start s2
+              :end e1)
+             (make-prange
+              :start s1
+              :end (1- s2))))
+
+      ;; On right
+      ((and (<= s1 e2)
+            (>= e1 e2)
+            ;; (print 3)
+            )
+       (list (make-prange
+              :start s1
+              :end e2)
+             (make-prange
+              :start s2
+              :end (1- e2))))
+
+      ;; Contains
+      ((and (< s1 s2)
+            (> e1 e2)
+            ;; (print 4)
+            )
+       (list (make-prange
+              :start s2
+              :end e2)))
+
+      (t (list pr1 pr2)))))
+
+(defmethod part-range-intersect-with-2 ((p1 part-range) (p2 part-range))
+  (bind ((p1-x (part-range-x-range p1))
+         (p1-m (part-range-m-range p1))
+         (p1-a (part-range-a-range p1))
+         (p1-s (part-range-s-range p1))
+         (p2-x (part-range-x-range p2))
+         (p2-m (part-range-m-range p2))
+         (p2-a (part-range-a-range p2))
+         (p2-s (part-range-s-range p2)))
+   (iter outer
+     (for x-range in (prange-intersect-with-2 p1-x p2-x))
+     (iter
+       (for m-range in (prange-intersect-with-2 p1-m p2-m))
+       (iter
+         (for a-range in (prange-intersect-with-2 p1-a p2-a))
+         (iter
+           (for s-range in (prange-intersect-with-2 p1-s p2-s))
+           (in outer
+               (collecting (make-part-range
+                            :x-range x-range
+                            :m-range m-range
+                            :a-range a-range
+                            :s-range s-range)))))))))
+
+(defun intersect-all-ranges (part-ranges)
+  (labels ((recur (intersected ranges)
+             (if (null ranges)
+                 intersected
+                 (bind (((next . rest) ranges))
+                   (recur (mapcan (lambda (range)
+                                    (part-range-intersect-with-2 range next))
+                                  intersected)
+                          rest)))))
+    (recur (list (car part-ranges))
+           (cdr part-ranges))))
+
+(defmethod prange-size ((p prange))
+  (with-slots (start end) p
+    (1+ (- start end))))
+
+(defmethod part-range-size ((p part-range))
+  (with-slots (x-range m-range a-range s-range) p
+    (* (prange-size x-range)
+       (prange-size m-range)
+       (prange-size a-range)
+       (prange-size s-range))))
 
 (defun part-2 (&optional (file-relative-path "src/day-19.in"))
   (bind (((rules . parts) (read-problem-2 file-relative-path))
-         (terminals (rules-ending-a rules)))
-    (format t "terminal: ~a~%" (nth 4 terminals))
-    ;; (trace-back (nth 4 terminals) rules)
-    (ranges (car (trace-back (nth 4 terminals) rules)))
+         (terminals (rules-ending-a rules))
+         (all-ranges (->> (mapcar (lambda (terminal)
+                                    (trace-back terminal rules))
+                                  terminals)
+                       (mapcar #'car)
+                       (mapcar #'ranges)
+                       (mapcar #'car)))
+         (intersected (intersect-all-ranges all-ranges))
+         )
+    ;; (format t "all-ranges: ~a~%" all-ranges)
+    ;; (format t "terminal: ~a~%" (nth 4 terminals))
+    ;; (ranges (car (trace-back (nth 4 terminals) rules)))
+    (apply #'+ (mapcar #'part-range-size intersected))
     ))
 
 (defun test-2 ()
