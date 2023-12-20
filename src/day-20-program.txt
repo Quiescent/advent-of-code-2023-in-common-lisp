@@ -1,0 +1,5 @@
+rx = !qt
+qt = !(mr & kk & gl & bb)
+mr = nl
+nl = !(rg & ql & ff & kf & ml & db & xx)
+rg = 

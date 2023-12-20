@@ -165,7 +165,10 @@
 
 (defun send-signals-2 (circuit)
   (bind ((queue (empty-seq))
-         (delivered nil))
+         (mr nil)
+         (kk nil)
+         (gl nil)
+         (bb nil))
     (labels ((push-button ()
                (setf queue (with-last queue (make-module-signal
                                              :value nil
@@ -181,14 +184,15 @@
                  (setf queue (less-first queue))
                  (for new-to-process = (process-signal signal))
                  (setf queue (concat queue (convert 'seq new-to-process)))
+                 (setf mr (or mr (module-output (gethash 'mr circuit))))
+                 (setf kk (or kk (module-output (gethash 'kk circuit))))
+                 (setf gl (or gl (module-output (gethash 'gl circuit))))
+                 (setf bb (or bb (module-output (gethash 'bb circuit))))
                  (finally (return (cons high-pulses low-pulses)))))
              (process-signal (signal)
                (with-slots (value dest-label source-label) signal
                  (bind ((dest (gethash dest-label circuit)))
                    ;; (format t "dest: ~a~%" dest)
-                   (when (and (eq dest-label 'rx)
-                              (not value))
-                     (setf delivered t))
                    (case (module-type dest)
                      (flip-flop (when (not value)
                                   (setf (module-output dest) (not (module-output dest)))
@@ -218,11 +222,24 @@
                                              :dest-label output
                                              :source-label dest-label))
                                           (module-outputs dest))))))))
+      ;; (iter
+      ;;   (for i from 1 to 1000)
+      ;;   (for (high-pulses . low-pulses) = (push-button))
+      ;;   (summing high-pulses into total-high-pulses)
+      ;;   (summing low-pulses into total-low-pulses)
+      ;;   (finally (return (* total-low-pulses total-high-pulses))))
       (iter
-        (for i from 1 to 100000000000)
+        (for i from 1 to 100000)
+        (format t "output: ~a~%" (module-output (gethash 'mr circuit)))
+        (setf mr nil
+              kk nil
+              gl nil
+              bb nil)
         (push-button)
-        (when delivered
-          (return i))))))
+        (format t "(list i mr kk gl bb): ~a~%" (list i mr kk gl bb)))
+      )))
+
+;; Periods: 3907 3931 3967 3989
 
 (defun trace-back (circuit)
   (bind ((trace-back nil)
@@ -234,16 +251,16 @@
                  (bind ((module (gethash node circuit)))
                    (iter
                      (for input in (module-inputs module))
-                     (recur (module-input-source input))
-                     (push (module-input-source input) trace-back))))))
+                     (recur (module-input-source input)))
+                   (push node trace-back)))))
       (recur 'rx)
       trace-back)))
 
 (defun part-2 (&optional (relative-path-name "src/day-20.in"))
   (bind ((problem (read-problem relative-path-name)))
-    (trace-back problem)
-    ;; (send-signals-2 problem)
-    ))
+    ;; (trace-back problem)
+    (send-signals-2 problem)
+    (lcm 3907 3931 3967 3989)))
 
 (defun test-2 ()
   (part-2 "src/day-20-test.in"))
