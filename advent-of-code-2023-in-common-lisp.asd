@@ -2,7 +2,7 @@
   :version "0.1.0"
   :author ""
   :license ""
-  :depends-on (:cl-ppcre :trivia :trivia.ppcre :arrow-macros :metabang-bind :fset :datastructures :cl-interval)
+  :depends-on (:cl-ppcre :trivia :trivia.ppcre :arrow-macros :metabang-bind :fset :datastructures)
   :components ((:module "src"
                         :components ((:file "day-20")
 (:file "day-19")
