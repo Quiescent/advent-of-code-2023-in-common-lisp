@@ -198,33 +198,28 @@
        :amount (if (eq inverted-comparator '<) (1+ amount) (1- amount))
        :dest dest))))
 
-(defun rule-restriction (rule target-dest)
-  (with-slots (code) rule
-    (bind ((individual-branch (iter outer
-                                (for branch in code)
-                                (when (eq (type-of branch) 'literal-comparison)
-                                  (with-slots (dest) branch
-                                    (when (eq dest target-dest)
-                                      (return-from outer branch)))))))
-      (or individual-branch
-          (iter
-            (for branch in (butlast code))
-            (collecting (literal-comparison-invert branch)))))))
-
-(defun trace-back (rule rules)
-  (labels ((recur (rule restrictions)
-             ;; (format t "Trace-back rule: ~a~%" rule)
-             (with-slots (label code) rule
-               (if (eq label 'in)
-                   (cons restrictions rule)
-                   (bind ((coming-from (rule-going-to rules label))
-                          (restriction (rule-restriction coming-from label)))
-                     ;; (format t "Trace-back coming-from: ~a~%" (literal-rule-label coming-from))
-                     ;; (format t "Trace-back restriction: ~a~%" restriction)
-                     (recur coming-from (if (listp restriction)
-                                            (append restriction restrictions)
-                                            (cons restriction restrictions))))))))
-    (recur rule nil)))
+(defun trace-forward (rules)
+  (bind ((all-restriction-sets nil))
+    (labels ((recur (rule restrictions)
+               (bind ((reversed nil))
+                (iter
+                  (for branch in (literal-rule-code rule))
+                  (when (eq (type-of branch) 'literal-comparison)
+                    (push (literal-comparison-invert branch) reversed))
+                  (cond
+                    ((eq branch 'r) nil)
+                    ((eq branch 'a) (push (append reversed restrictions) all-restriction-sets))
+                    ((eq (type-of branch) 'literal-comparison)
+                     (with-slots (dest) branch
+                       (if (eq dest 'a)
+                           (push (cons branch (append (cdr reversed) restrictions)) all-restriction-sets)
+                           (when (not (eq dest 'r))
+                             (recur (gethash dest rules)
+                                    (cons branch (append (cdr reversed) restrictions)))))))
+                    (t (recur (gethash branch rules)
+                              (append reversed restrictions))))))))
+      (recur (gethash 'in rules) nil)
+      all-restriction-sets)))
 
 ;; Inclusive range
 (defstruct prange
@@ -275,9 +270,7 @@
             (<= e1 e2)
             ; (print 1)
             )
-       (make-prange
-        :start s1
-        :end e1))
+       pr1)
 
       ;; On left
       ((and (<= s1 s2)
@@ -302,84 +295,35 @@
             (> e1 e2)
             ;(print 4)
             )
-       (make-prange
-        :start s2
-        :end e2))
+       pr2)
 
       ;; No intersection.  Shouldn't happen.
       (t nil))))
 
 (defmethod part-range-intersect ((p1 part-range) (p2 part-range))
-  (make-part-range
-   :x-range (prange-intersect (part-range-x-range p1) (part-range-x-range p2))
-   :m-range (prange-intersect (part-range-m-range p1) (part-range-m-range p2))
-   :a-range (prange-intersect (part-range-a-range p1) (part-range-a-range p2))
-   :s-range (prange-intersect (part-range-s-range p1) (part-range-s-range p2))))
+  (bind ((x (prange-intersect (part-range-x-range p1) (part-range-x-range p2)))
+         (m (prange-intersect (part-range-m-range p1) (part-range-m-range p2)))
+         (a (prange-intersect (part-range-a-range p1) (part-range-a-range p2)))
+         (s (prange-intersect (part-range-s-range p1) (part-range-s-range p2))))
+    (when (not (some #'null (list x m a s)))
+     (make-part-range
+      :x-range x
+      :m-range m
+      :a-range a
+      :s-range s))))
 
 (defun ranges (restrictions-start)
-  ;; (format t "restrictions-start: ~a~%" restrictions-start)
-  (labels ((recur (restrictions ranges)
-             ;; (format t "(car restrictions): ~a~%" (car restrictions))
-             ;; (format t "ranges: ~a~%" ranges)
-             (if (null restrictions) ranges
+  (labels ((recur (restrictions range)
+             (if (null restrictions)
+                 range
                  (recur (cdr restrictions)
-                        (mapcar (lambda (range)
-                                  (part-range-intersect range
-                                                        (literal-comparison-to-part-range (car restrictions))))
-                                ranges)))))
-    (recur restrictions-start (list full-part-range))))
-
-(defun remove-invalid (pranges)
-  (remove-if (lambda (range)
-               (or (null range)
-                   (with-slots (start end) range
-                     (= start end))))
-             pranges))
-
-(defmethod prange-intersect-with-2 ((pr1 prange) (pr2 prange))
-  (bind ((s1 (prange-start pr1))
-         (e1 (prange-end pr1))
-         (s2 (prange-start pr2))
-         (e2 (prange-end pr2)))
-    (cond
-      ;; Contained
-      ((and (>= s1 s2)
-            (<= e1 e2)
-            ;; (print 1)
-            )
-       pr1)
-
-      ;; On left
-      ((and (< s1 s2)
-            (<= e1 e2)
-            ;; (print 2)
-            )
-       (make-prange
-        :start s2
-        :end e1))
-
-      ;; On right
-      ((and (<= s1 e2)
-            (> e1 e2)
-            ;; (print 3)
-            )
-       (make-prange
-        :start s1
-        :end e2))
-
-      ;; Contains
-      ((and (< s1 s2)
-            (> e1 e2)
-            ;; (print 4)
-            )
-       pr2)
-
-      ;; No intersection
-      (t nil))))
+                        (part-range-intersect range
+                                              (literal-comparison-to-part-range (car restrictions)))))))
+    (recur restrictions-start full-part-range)))
 
 (defmethod prange-size ((p prange))
   (with-slots (start end) p
-    (1+ (- start end))))
+    (1+ (- end start))))
 
 (defmethod part-range-size ((p part-range))
   (with-slots (x-range m-range a-range s-range) p
@@ -388,45 +332,12 @@
        (prange-size a-range)
        (prange-size s-range))))
 
-(defmethod part-overlap ((p1 part-range) (p2 part-range))
-  (bind ((p1-x (part-range-x-range p1))
-         (p1-m (part-range-m-range p1))
-         (p1-a (part-range-a-range p1))
-         (p1-s (part-range-s-range p1))
-         (p2-x (part-range-x-range p2))
-         (p2-m (part-range-m-range p2))
-         (p2-a (part-range-a-range p2))
-         (p2-s (part-range-s-range p2)))
-    ;; (make-part-range
-    ;;  :x-range )
-    ))
-
-(defun total-intersecting (ranges-start)
-  (labels ((recur (ranges)
-             (if (null ranges)
-                 0
-                 (bind (((current . rest) ranges))
-                   (+ (if rest
-                          (iter
-                            (for other in rest)
-                            (summing (part-range-size (part-range-intersect current other))))
-                          0)
-                      (recur (cdr ranges)))))))
-    (recur ranges-start)))
-
 (defun part-2 (&optional (file-relative-path "src/day-19.in"))
   (bind (((rules . parts) (read-problem-2 file-relative-path))
-         (terminals (rules-ending-a rules))
-         (all-ranges (->> (mapcar (lambda (terminal)
-                                    (trace-back terminal rules))
-                                  terminals)
-                       (mapcar #'car)
-                       (mapcar #'ranges)
-                       (mapcar #'car))))
+         (rule-sets (trace-forward rules))
+         (all-ranges (mapcar #'ranges rule-sets)))
     (declare (ignore parts))
-    (- (->> (mapcar #'part-range-size all-ranges) (apply #'+))
-       (total-intersecting all-ranges))
-    ))
+    (->> (mapcar #'part-range-size all-ranges) (apply #'+))))
 
 (defun test-2 ()
   (part-2 "src/day-19-test.in"))
