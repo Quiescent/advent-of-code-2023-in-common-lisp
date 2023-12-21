@@ -105,6 +105,38 @@
           (setf queue (with-last queue next)))))
     seen))
 
+(defun grid-get-infini (grid c)
+  (bind ((x (realpart c))
+         (y (imagpart c)))
+    (-> (aref grid (mod y (length grid)))
+      (aref (mod x (length (aref grid 0)))))))
+
+(defun infini-bfs (grid start max-distance)
+  (bind ((queue (empty-seq))
+         (seen (make-hash-table :test #'equal))
+         (directions (list right down left up)))
+    (setf queue (with-last queue start))
+    (setf (gethash start seen) 0)
+    (iter
+      (while (not (empty? queue)))
+      (for current = (first queue))
+      ;; (format t "current: ~a~%" current)
+      (setf queue (less-first queue))
+      (when (>= (gethash current seen) max-distance)
+        (next-iteration))
+      (iter
+        (for direction in directions)
+        (for next = (+ current direction))
+        (when (and (not (gethash next seen))
+                   (or (char-equal #\. (grid-get-infini grid next))
+                       (char-equal #\S (grid-get-infini grid next))))
+          (setf (gethash next seen)
+                (1+ (gethash current seen)))
+          (setf queue (with-last queue next)))))
+    (iter
+      (for (key value) in-hashtable seen)
+      (counting (= 0 (mod value 2))))))
+
 (defun count-reachable (seen)
   (iter
     (for (key value) in-hashtable seen)
@@ -144,7 +176,7 @@
          (top-entry (complex start-x 0))
          (bottom-entry (complex start-x (1- (length grid))))
          (start-bfs (unlocked-bfs grid start (* (length grid) (length grid))))
-         (steps-remaining (length grid))
+         (steps-remaining (* (length grid) 2))
          (seen-entering-bottom (unlocked-bfs grid
                                              bottom-entry
                                              steps-remaining))
@@ -194,21 +226,44 @@
     (format t "seen-top: ~a~%" seen-top)
     (format t "seen-left: ~a~%" seen-top)
     (format t "seen-right: ~a~%" seen-top)
+    ;; (+ (* all-seen-reachable-evens interior-size-odds)
+    ;;    (* all-seen-reachable-odds interior-size-evens)
+    ;;    seen-bottom
+    ;;    seen-left
+    ;;    seen-right
+    ;;    seen-top
+    ;;    (* seen-top-right-edge hypo-len)
+    ;;    (* seen-bottom-right-edge hypo-len)
+    ;;    (* seen-top-left-edge hypo-len)
+    ;;    (* seen-bottom-left-edge hypo-len))
     (+ (* all-seen-reachable-evens interior-size-odds)
        (* all-seen-reachable-odds interior-size-evens)
-       seen-bottom
-       seen-left
-       seen-right
-       seen-top
-       (* seen-top-right-edge hypo-len)
-       (* seen-bottom-right-edge hypo-len)
-       (* seen-top-left-edge hypo-len)
-       (* seen-bottom-left-edge hypo-len))))
+       all-seen-reachable-evens
+       all-seen-reachable-evens
+       all-seen-reachable-evens
+       all-seen-reachable-evens
+       (* all-seen-reachable-evens hypo-len)
+       (* all-seen-reachable-evens hypo-len)
+       (* all-seen-reachable-evens hypo-len)
+       (* all-seen-reachable-evens hypo-len))))
+
+(defun grid-distances (grid)
+  (bind ((start (starting-point grid)))
+    (iter
+      (for i from 0 below 10)
+      (for max-distance = (+ 65 (* (length grid) i)))
+      (for reachable = (infini-bfs grid start max-distance))
+      (for p-reachable previous reachable initially 0)
+      (format t "max-distance: ~a~%" max-distance)
+      (format t "reachable: ~a~%" reachable)
+      (format t "delta: ~a~%" (- reachable p-reachable)))))
 
 (defun part-2 (&optional (relative-path-name "src/day-21.in"))
   (bind ((problem (read-problem relative-path-name)))
-    (totals problem 26501365 ;; 589 ;; 458 ;; 26501365
-            )))
+    ;; (totals problem 26501365 ;; 589 ;; 458 ;; 26501365
+    ;;         )
+    (format t "Result: ~a~%" (totals problem 458))
+    (grid-distances problem)))
 
 ;; 130 x 130 grid
 ;; Wrong: 623128465540000
