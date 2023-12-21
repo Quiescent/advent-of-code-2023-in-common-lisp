@@ -247,10 +247,95 @@
        (* all-seen-reachable-evens hypo-len)
        (* all-seen-reachable-evens hypo-len))))
 
+(defun count-separate (seen)
+  (iter
+    (for (key value) in-hashtable seen)
+    (counting (= (mod value 2) 0) into lights)
+    (counting (/= (mod value 2) 0) into darks)
+    (finally (return (cons lights darks)))))
+
+(defun invert-colour (colour)
+  (if (eq colour 'light) 'dark 'light))
+
+(defun meta-bfs (grid initial-remaining)
+  (bind ((queue (empty-seq))
+         (seen (make-hash-table :test #'equal))
+         (start (starting-point grid))
+         (start-x (realpart start))
+         (start-y (imagpart start))
+         (left-entry (complex 0 start-y))
+         (right-entry (complex (1- (length (aref grid 0))) start-y))
+         (top-entry (complex start-x 0))
+         (bottom-entry (complex start-x (1- (length grid))))
+         (directions (list (cons right left-entry)
+                           (cons down top-entry)
+                           (cons left right-entry)
+                           (cons up bottom-entry)))
+         (start-bfs (unlocked-bfs grid start (* 130 130)))
+         (steps-to-escape (length grid))
+         ((light-size . dark-size) (count-separate start-bfs)))
+    (format t "steps-to-escape: ~a~%" steps-to-escape)
+    (setq queue (with-last queue (list #c(0 0) (starting-point grid) initial-remaining 'dark)))
+    (iter
+      (while (not (empty? queue)))
+      (for (meta-coord entry-point remaining colour) = (first queue))
+      (format t "meta-coord: ~a~%" meta-coord)
+      (setf queue (less-first queue))
+      (if (>= remaining steps-to-escape)
+          (progn
+            (setf (gethash meta-coord seen)
+                  (if (eq colour 'light)
+                      light-size
+                      dark-size))
+            (iter
+              (for (direction . next-start) in directions)
+              (for next-meta-coord = (+ direction meta-coord))
+              (when (not (gethash next-meta-coord seen))
+                (setf queue (with-last queue (list next-meta-coord
+                                                   next-start
+                                                   (- remaining steps-to-escape)
+                                                   (invert-colour colour)))))))
+          (progn
+            (format t "HERE~%")
+            (incf (gethash meta-coord seen 0)
+                  (car (count-separate (unlocked-bfs grid entry-point remaining))))
+            (cond
+              ((eq entry-point left-entry)
+               ;; Add going up and down (Doesn't matter that I'm
+               ;; adding them to the wrong cell.
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex 0 (1- (length grid))) (- remaining (floor (length grid) 2))))))
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex 0 0) (- remaining (floor (length grid) 2)))))))
+              ((eq entry-point right-entry)
+               ;; Add going up and down (Doesn't matter that I'm
+               ;; adding them to the wrong cell.
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) (1- (length grid))) (- remaining (floor (length grid) 2))))))
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) 0) (- remaining (floor (length grid) 2)))))))
+              ((eq entry-point top-entry)
+               ;; Add going left and right (Doesn't matter that I'm
+               ;; adding them to the wrong cell.
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) 0) (- remaining (floor (length grid) 2))))))
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex 0 0) (- remaining (floor (length grid) 2)))))))
+              ((eq entry-point bottom-entry)
+               ;; Add going left and right (Doesn't matter that I'm
+               ;; adding them to the wrong cell.
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) (1- (length grid))) (- remaining (floor (length grid) 2))))))
+               (incf (gethash meta-coord seen 0)
+                     (car (count-separate (unlocked-bfs grid (complex 0 (1- (length grid))) remaining)))))))))
+    (iter
+      (for (key value) in-hashtable seen)
+      (summing value))))
+
 (defun grid-distances (grid)
   (bind ((start (starting-point grid)))
     (iter
-      (for i from 0 below 10)
+      (for i from 0 below 4)
       (for max-distance = (+ 65 (* (length grid) i)))
       (for reachable = (infini-bfs grid start max-distance))
       (for p-reachable previous reachable initially 0)
@@ -263,6 +348,7 @@
     ;; (totals problem 26501365 ;; 589 ;; 458 ;; 26501365
     ;;         )
     (format t "Result: ~a~%" (totals problem 458))
+    (format t "Meta result: ~a~%" (meta-bfs problem 458))
     (grid-distances problem)))
 
 ;; 130 x 130 grid
