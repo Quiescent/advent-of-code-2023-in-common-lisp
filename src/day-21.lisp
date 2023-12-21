@@ -153,13 +153,69 @@
           (progn
             (print "HERE")
             (setf (gethash meta-coord seen)
-                 (unlocked-bfs grid entry-point remaining)))))))
+                  (unlocked-bfs grid entry-point remaining)))))))
+
+(defun count-reachable (seen)
+  (iter
+    (for (key value) in-hashtable seen)
+    (counting (= (mod value 2) 0))))
+
+(defun merge-seen (seen-1 seen-2)
+  (bind ((new-seen (make-hash-table :test #'equal)))
+    (iter
+      (for (key-1 value-1) in-hashtable seen-1)
+      (setf (gethash key-1 new-seen) value-1))
+    (iter
+      (for (key-2 value-2) in-hashtable seen-2)
+      (setf (gethash key-2 new-seen) value-2))))
+
+(defun totals (grid initial-remaining)
+  (bind ((start (print (starting-point grid)))
+         (start-x (realpart start))
+         (start-y (imagpart start))
+         (left-entry (complex 0 start-y))
+         (right-entry (complex (1- (length (aref grid 0))) start-y))
+         (top-entry (complex start-x 0))
+         (bottom-entry (complex start-x (1- (length grid))))
+         (start-bfs (unlocked-bfs grid start (* (length grid) (length grid))))
+         ;; (steps-remaining (mod (- initial-remaining start-x) (length grid)))
+         ;; (seen-entering-bottom (unlocked-bfs grid
+         ;;                                     bottom-entry
+         ;;                                     steps-remaining))
+         ;; (seen-entering-left (unlocked-bfs grid
+         ;;                                   left-entry
+         ;;                                   steps-remaining))
+         ;; (seen-entering-right (unlocked-bfs grid
+         ;;                                    right-entry
+         ;;                                    steps-remaining))
+         ;; (seen-entering-top (unlocked-bfs grid
+         ;;                                  top-entry
+         ;;                                  steps-remaining))
+         ;; (seen-bottom (count-reachable seen-entering-bottom))
+         ;; (seen-left (count-reachable seen-entering-left))
+         ;; (seen-right (count-reachable seen-entering-right))
+         ;; (seen-top (count-reachable seen-entering-top))
+         ;; (seen-top-right-edge (count-reachable (merge-seen seen-entering-bottom
+         ;;                                                   seen-entering-left)))
+         ;; (seen-bottom-right-edge (count-reachable (merge-seen seen-entering-top
+         ;;                                                      seen-entering-left)))
+         ;; (seen-top-left-edge (count-reachable (merge-seen seen-entering-right
+         ;;                                                  seen-entering-bottom)))
+         ;; (seen-bottom-left-edge (count-reachable (merge-seen seen-entering-right
+         ;;                                                     seen-entering-top)))
+         (all-seen-reachable (count-reachable start-bfs))
+         (tri-length (floor initial-remaining (length grid)))
+         (tri-area (* (floor tri-length 2) tri-length))
+         (interior-size (* tri-area 4)))
+    (format t "interior-size: ~a~%" interior-size)
+    (* all-seen-reachable interior-size)))
 
 (defun part-2 (&optional (relative-path-name "src/day-21.in"))
   (bind ((problem (read-problem relative-path-name)))
-    (meta-bfs problem 26501365)))
+    (totals problem 26501365)))
 
 ;; 130 x 130 grid
+;; Wrong: 623128465540000
 
 (defun test-2 ()
   (part-2 "src/day-21-test.in"))
