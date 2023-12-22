@@ -145,7 +145,11 @@
 (defun count-reachable-odds (seen)
   (iter
     (for (key value) in-hashtable seen)
-    (counting (= (mod value 2) 0))))
+    (maximizing value into max-value)
+    (counting (= (mod value 2) 0) into result)
+    (finally
+     (progn (format t "max-value: ~a~%" max-value)
+            (return result)))))
 
 (defun merge-seen (seen-1 seen-2)
   (bind ((new-seen (make-hash-table :test #'equal)))
@@ -176,7 +180,7 @@
          (top-entry (complex start-x 0))
          (bottom-entry (complex start-x (1- (length grid))))
          (start-bfs (unlocked-bfs grid start (* (length grid) (length grid))))
-         (steps-remaining (* (length grid) 2))
+         (steps-remaining (1- (length grid)))
          (seen-entering-bottom (unlocked-bfs grid
                                              bottom-entry
                                              steps-remaining))
@@ -193,6 +197,25 @@
          (seen-left (count-reachable-odds seen-entering-left))
          (seen-right (count-reachable-odds seen-entering-right))
          (seen-top (count-reachable-odds seen-entering-top))
+         (seen-from-bottom-left (count-reachable
+                                 (unlocked-bfs grid
+                                               (complex 0
+                                                        (1- (length grid)))
+                                               65)))
+         (seen-from-bottom-right (count-reachable
+                                  (unlocked-bfs grid
+                                                (complex (1- (1- (length grid)))
+                                                         (1- (length grid)))
+                                                65)))
+         (seen-from-top-left (count-reachable
+                              (unlocked-bfs grid
+                                            (complex 0 0)
+                                            65)))
+         (seen-from-top-right (count-reachable
+                               (unlocked-bfs grid
+                                             (complex (1- (length grid))
+                                                      0)
+                                             65)))
          (seen-top-right-edge (count-reachable-odds (merge-seen seen-entering-bottom
                                                            seen-entering-left)))
          (seen-bottom-right-edge (count-reachable-odds (merge-seen seen-entering-top
@@ -207,11 +230,11 @@
          (side-to-side (1+ (* 2 (1- tri-length))))
          (interior-size (+ side-to-side (* 2 (sum-odds (- side-to-side 2)))))
          (interior-size-evens (iter
-                                (for i from 2 below tri-length by 2)
+                                (for i from 2 to tri-length by 2)
                                 ;; (format t "i: ~a~%" (diamond-perimeter i))
                                 (summing (diamond-perimeter i))))
          (interior-size-odds (iter
-                               (for i from 1 below tri-length by 2)
+                               (for i from 1 to tri-length by 2)
                                ;; (format t "i: ~a~%" (diamond-perimeter i))
                                (summing (diamond-perimeter i))))
          (hypo-len (floor (1- (* tri-length 2)) 2)))
@@ -226,111 +249,20 @@
     (format t "seen-top: ~a~%" seen-top)
     (format t "seen-left: ~a~%" seen-top)
     (format t "seen-right: ~a~%" seen-top)
-    ;; (+ (* all-seen-reachable-evens interior-size-odds)
-    ;;    (* all-seen-reachable-odds interior-size-evens)
-    ;;    seen-bottom
-    ;;    seen-left
-    ;;    seen-right
-    ;;    seen-top
-    ;;    (* seen-top-right-edge hypo-len)
-    ;;    (* seen-bottom-right-edge hypo-len)
-    ;;    (* seen-top-left-edge hypo-len)
-    ;;    (* seen-bottom-left-edge hypo-len))
     (+ (* all-seen-reachable-evens interior-size-odds)
        (* all-seen-reachable-odds interior-size-evens)
-       all-seen-reachable-evens
-       all-seen-reachable-evens
-       all-seen-reachable-evens
-       all-seen-reachable-evens
-       (* all-seen-reachable-evens hypo-len)
-       (* all-seen-reachable-evens hypo-len)
-       (* all-seen-reachable-evens hypo-len)
-       (* all-seen-reachable-evens hypo-len))))
-
-(defun count-separate (seen)
-  (iter
-    (for (key value) in-hashtable seen)
-    (counting (= (mod value 2) 0) into lights)
-    (counting (/= (mod value 2) 0) into darks)
-    (finally (return (cons lights darks)))))
-
-(defun invert-colour (colour)
-  (if (eq colour 'light) 'dark 'light))
-
-(defun meta-bfs (grid initial-remaining)
-  (bind ((queue (empty-seq))
-         (seen (make-hash-table :test #'equal))
-         (start (starting-point grid))
-         (start-x (realpart start))
-         (start-y (imagpart start))
-         (left-entry (complex 0 start-y))
-         (right-entry (complex (1- (length (aref grid 0))) start-y))
-         (top-entry (complex start-x 0))
-         (bottom-entry (complex start-x (1- (length grid))))
-         (directions (list (cons right left-entry)
-                           (cons down top-entry)
-                           (cons left right-entry)
-                           (cons up bottom-entry)))
-         (start-bfs (unlocked-bfs grid start (* 130 130)))
-         (steps-to-escape (length grid))
-         ((light-size . dark-size) (count-separate start-bfs)))
-    (format t "steps-to-escape: ~a~%" steps-to-escape)
-    (setq queue (with-last queue (list #c(0 0) (starting-point grid) initial-remaining 'dark)))
-    (iter
-      (while (not (empty? queue)))
-      (for (meta-coord entry-point remaining colour) = (first queue))
-      (format t "meta-coord: ~a~%" meta-coord)
-      (setf queue (less-first queue))
-      (if (>= remaining steps-to-escape)
-          (progn
-            (setf (gethash meta-coord seen)
-                  (if (eq colour 'light)
-                      light-size
-                      dark-size))
-            (iter
-              (for (direction . next-start) in directions)
-              (for next-meta-coord = (+ direction meta-coord))
-              (when (not (gethash next-meta-coord seen))
-                (setf queue (with-last queue (list next-meta-coord
-                                                   next-start
-                                                   (- remaining steps-to-escape)
-                                                   (invert-colour colour)))))))
-          (progn
-            (format t "HERE~%")
-            (incf (gethash meta-coord seen 0)
-                  (car (count-separate (unlocked-bfs grid entry-point remaining))))
-            (cond
-              ((eq entry-point left-entry)
-               ;; Add going up and down (Doesn't matter that I'm
-               ;; adding them to the wrong cell.
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex 0 (1- (length grid))) (- remaining (floor (length grid) 2))))))
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex 0 0) (- remaining (floor (length grid) 2)))))))
-              ((eq entry-point right-entry)
-               ;; Add going up and down (Doesn't matter that I'm
-               ;; adding them to the wrong cell.
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) (1- (length grid))) (- remaining (floor (length grid) 2))))))
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) 0) (- remaining (floor (length grid) 2)))))))
-              ((eq entry-point top-entry)
-               ;; Add going left and right (Doesn't matter that I'm
-               ;; adding them to the wrong cell.
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) 0) (- remaining (floor (length grid) 2))))))
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex 0 0) (- remaining (floor (length grid) 2)))))))
-              ((eq entry-point bottom-entry)
-               ;; Add going left and right (Doesn't matter that I'm
-               ;; adding them to the wrong cell.
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex (1- (length grid)) (1- (length grid))) (- remaining (floor (length grid) 2))))))
-               (incf (gethash meta-coord seen 0)
-                     (car (count-separate (unlocked-bfs grid (complex 0 (1- (length grid))) remaining)))))))))
-    (iter
-      (for (key value) in-hashtable seen)
-      (summing value))))
+       seen-bottom
+       seen-left
+       seen-right
+       seen-top
+       (* seen-top-right-edge hypo-len)
+       (* seen-bottom-right-edge hypo-len)
+       (* seen-top-left-edge hypo-len)
+       (* seen-bottom-left-edge hypo-len)
+       (* seen-from-top-left tri-length)
+       (* seen-from-top-right tri-length)
+       (* seen-from-bottom-left tri-length)
+       (* seen-from-bottom-right tri-length))))
 
 (defun grid-distances (grid)
   (bind ((start (starting-point grid)))
@@ -347,8 +279,8 @@
   (bind ((problem (read-problem relative-path-name)))
     ;; (totals problem 26501365 ;; 589 ;; 458 ;; 26501365
     ;;         )
-    (format t "Result: ~a~%" (totals problem 458))
-    (format t "Meta result: ~a~%" (meta-bfs problem 458))
+    (format t "Result: ~a~%" (totals problem 458 ;; 26501365
+                                     ))
     (grid-distances problem)))
 
 ;; 130 x 130 grid
