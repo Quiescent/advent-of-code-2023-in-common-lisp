@@ -4,7 +4,8 @@
   :license ""
   :depends-on (:cl-ppcre :trivia :trivia.ppcre :arrow-macros :metabang-bind :fset :datastructures)
   :components ((:module "src"
-                        :components ((:file "day-21")
+                        :components ((:file "day-22")
+(:file "day-21")
 (:file "day-20")
 (:file "day-19")
 (:file "day-18")
