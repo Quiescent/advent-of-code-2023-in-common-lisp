@@ -145,11 +145,7 @@
 (defun count-reachable-odds (seen)
   (iter
     (for (key value) in-hashtable seen)
-    (maximizing value into max-value)
-    (counting (= (mod value 2) 0) into result)
-    (finally
-     (progn (format t "max-value: ~a~%" max-value)
-            (return result)))))
+    (counting (= (mod value 2) 0))))
 
 (defun merge-seen (seen-1 seen-2)
   (bind ((new-seen (make-hash-table :test #'equal)))
@@ -180,7 +176,7 @@
          (top-entry (complex start-x 0))
          (bottom-entry (complex start-x (1- (length grid))))
          (start-bfs (unlocked-bfs grid start (* (length grid) (length grid))))
-         (steps-remaining (1- (length grid)))
+         (steps-remaining (- (length grid) 1))
          (seen-entering-bottom (unlocked-bfs grid
                                              bottom-entry
                                              steps-remaining))
@@ -197,60 +193,68 @@
          (seen-left (count-reachable-odds seen-entering-left))
          (seen-right (count-reachable-odds seen-entering-right))
          (seen-top (count-reachable-odds seen-entering-top))
-         (seen-from-bottom-left (count-reachable
-                                 (unlocked-bfs grid
-                                               (complex 0
-                                                        (1- (length grid)))
-                                               65)))
-         (seen-from-bottom-right (count-reachable
-                                  (unlocked-bfs grid
-                                                (complex (1- (1- (length grid)))
-                                                         (1- (length grid)))
-                                                65)))
-         (seen-from-top-left (count-reachable
-                              (unlocked-bfs grid
-                                            (complex 0 0)
-                                            65)))
-         (seen-from-top-right (count-reachable
-                               (unlocked-bfs grid
-                                             (complex (1- (length grid))
-                                                      0)
-                                             65)))
-         (seen-top-right-edge (count-reachable-odds (merge-seen seen-entering-bottom
-                                                           seen-entering-left)))
-         (seen-bottom-right-edge (count-reachable-odds (merge-seen seen-entering-top
-                                                              seen-entering-left)))
-         (seen-top-left-edge (count-reachable-odds (merge-seen seen-entering-right
-                                                          seen-entering-bottom)))
-         (seen-bottom-left-edge (count-reachable-odds (merge-seen seen-entering-right
-                                                             seen-entering-top)))
+         (tri-length (floor initial-remaining (length grid)))
+         (from-corner-function (if (= (mod tri-length 2) 1)
+                                   #'count-reachable
+                                   #'count-reachable-odds))
+         (seen-from-bottom-left (funcall from-corner-function
+                                         (unlocked-bfs grid
+                                                       (complex 0
+                                                                (1- (length grid)))
+                                                       (1- 65))))
+         (seen-from-bottom-right (funcall from-corner-function
+                                          (unlocked-bfs grid
+                                                        (complex (1- (1- (length grid)))
+                                                                 (1- (length grid)))
+                                                        (1- 65))))
+         (seen-from-top-left (funcall from-corner-function
+                                      (unlocked-bfs grid
+                                                    (complex 0 0)
+                                                    (1- 65))))
+         (seen-from-top-right (funcall from-corner-function
+                                       (unlocked-bfs grid
+                                                     (complex (1- (length grid))
+                                                              0)
+                                                     (1- 65))))
+         (from-side-function (if (= (mod tri-length 2) 1)
+                                 #'count-reachable-odds
+                                 #'count-reachable))
+         (seen-top-right-edge (funcall from-side-function
+                                       (merge-seen seen-entering-bottom
+                                                   seen-entering-left)))
+         (seen-bottom-right-edge (funcall from-side-function
+                                          (merge-seen seen-entering-top
+                                                      seen-entering-left)))
+         (seen-top-left-edge (funcall from-side-function
+                                      (merge-seen seen-entering-right
+                                                  seen-entering-bottom)))
+         (seen-bottom-left-edge (funcall from-side-function
+                                         (merge-seen seen-entering-right
+                                                     seen-entering-top)))
          (all-seen-reachable-evens (count-reachable start-bfs))
          (all-seen-reachable-odds (count-reachable-odds start-bfs))
-         (tri-length (floor initial-remaining (length grid)))
          (side-to-side (1+ (* 2 (1- tri-length))))
-         (interior-size (+ side-to-side (* 2 (sum-odds (- side-to-side 2)))))
          (interior-size-evens (iter
                                 (for i from 2 to tri-length by 2)
-                                ;; (format t "i: ~a~%" (diamond-perimeter i))
+                                (format t "i: ~a~%" (diamond-perimeter i))
                                 (summing (diamond-perimeter i))))
          (interior-size-odds (iter
                                (for i from 1 to tri-length by 2)
-                               ;; (format t "i: ~a~%" (diamond-perimeter i))
+                               (format t "i: ~a~%" (diamond-perimeter i))
                                (summing (diamond-perimeter i))))
          (hypo-len (floor (1- (* tri-length 2)) 2)))
     (format t "all-seen-reachable-evens: ~a~%" all-seen-reachable-evens)
     (format t "all-seen-reachable-odds: ~a~%" all-seen-reachable-odds)
     (format t "side-to-side: ~a~%" side-to-side)
     (format t "initial-remaining: ~a~%" initial-remaining)
-    (format t "interior-size: ~a~%" interior-size)
     (format t "tri-length: ~a~%" tri-length)
     (format t "hypo-len: ~a~%" hypo-len)
     (format t "seen-bottom: ~a~%" seen-bottom)
     (format t "seen-top: ~a~%" seen-top)
     (format t "seen-left: ~a~%" seen-top)
     (format t "seen-right: ~a~%" seen-top)
-    (+ (* all-seen-reachable-evens interior-size-odds)
-       (* all-seen-reachable-odds interior-size-evens)
+    (+ (* all-seen-reachable-evens interior-size-evens)
+       (* all-seen-reachable-odds interior-size-odds)
        seen-bottom
        seen-left
        seen-right
@@ -295,6 +299,7 @@
 ;; Wrong: 621937848921722
 ;; Wrong: 621937800167297
 ;; Wrong: 621937788464320
+;; Wrong: 621944729346868
 
 (defun test-2 ()
   (part-2 "src/day-21-test.in"))
