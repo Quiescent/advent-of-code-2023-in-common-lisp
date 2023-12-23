@@ -116,12 +116,12 @@
     (iter
       (while (not (empty? queue)))
       (for (coord . dist) = (first queue))
+      (setf queue (less-first queue))
       (when (/= dist (gethash coord seen))
         (next-iteration))
       (when (= coord end)
         (format t "(cons coord dist): ~a~%" (cons coord dist))
         (print-path from start coord dist))
-      (setf queue (less-first queue))
       (iter
         (for new-coord in (connecting-points grid coord))
         (for new-dist = (1+ dist))
@@ -149,43 +149,47 @@
                   (member tile (list #\> #\^ #\v #\<)))
           (collecting (cons new-coord delta)))))))
 
-(defun is-not-in-path-back-2 (from start c dist test-c)
+(defun is-not-in-path-back-2 (from start c dist direction test-c)
   (and (/= start test-c)
        (iter
          (while (/= start c))
          (never (= c test-c))
-         (for (next-coord . next-dist) = (gethash (cons c dist) from))
-         (setf c    next-coord
-               dist next-dist))))
+         (for (next-coord next-dist next-direction) = (gethash (list c dist direction) from))
+         (setf c         next-coord
+               dist      next-dist
+               direction next-direction))))
 
 (defun longest-paths-2 (grid)
   (bind ((start (starting-point grid))
          (end (end-point grid))
-         (queue (seq (cons start 0)))
+         (queue (seq (list start 0 up)))
          (seen (make-hash-table :test #'equal))
          (from (make-hash-table :test #'equal))
          (longest most-negative-fixnum))
-    (setf (gethash start seen) 0)
+    (setf (gethash (cons start up) seen) 0)
     (setf (gethash (cons start 0) from) (cons start 0))
     (iter
       (while (not (empty? queue)))
-      (for (list coord dist in-direction) = (first queue))
-      (when (/= dist (gethash (cons coord in-direction) seen))
+      (for (coord dist direction) = (first queue))
+      (setf queue (less-first queue))
+      ;; (format t "(list coord dist direction): ~a~%" (list coord dist direction))
+      (when (/= dist (gethash (cons coord direction) seen))
         (next-iteration))
       (when (= coord end)
         (setf longest (max longest dist))
         (format t "(cons coord dist): ~a~%" (cons coord dist))
-        (print-path from start coord dist))
-      (setf queue (less-first queue))
+        ;; (print-path from start coord dist)
+        )
       (iter
         (for new-coord-direction in (connecting-points-2 grid coord))
-        (for (new-coord . direction) = new-coord-direction)
+        (for (new-coord . new-direction) = new-coord-direction)
         (for new-dist = (1+ dist))
         (when (and (< (gethash new-coord-direction seen most-negative-fixnum) new-dist)
-                   (is-not-in-path-back from start coord dist new-coord))
+                   (is-not-in-path-back-2 from start coord dist direction new-coord))
+          ;; (format t "new-coord-direction: ~a~%" new-coord-direction)
           (setf (gethash new-coord-direction seen) new-dist)
-          (setf (gethash (list new-coord new-dist) from) (cons coord dist))
-          (setf queue (with-last queue (cons new-coord new-dist))))))
+          (setf (gethash (list new-coord new-dist new-direction) from) (list coord dist direction))
+          (setf queue (with-last queue (list new-coord new-dist new-direction))))))
     ))
 
 (defun longest-of-all (grid)
@@ -200,10 +204,112 @@
                        (maximize (recur new-coord (1+ dist) (with seen new-coord))))))))
       (recur start 0 (set start)))))
 
+(defun is-intersection (grid c)
+  (> (iter
+       (for (new-coord . _) in (connecting-points-2 grid c))
+       (for tile = (grid-at grid new-coord))
+       (counting (or (char-equal tile #\.)
+                     (member tile (list #\> #\^ #\v #\<)))))
+     2))
+
+(defun intersections-reachable (grid start-c end)
+  (bind ((seen (make-hash-table :test #'equal))
+         (queue (seq start-c)))
+    (setf (gethash start-c seen) 0)
+    (iter outer
+      (while (not (empty? queue)))
+      (for c = (first queue))
+      (setf queue (less-first queue))
+      (iter
+        (for (new-c . _) in (connecting-points-2 grid c))
+        (when (not (gethash new-c seen))
+          (setf (gethash new-c seen) (1+ (gethash c seen)))
+          (if (or (= new-c end)
+                  (is-intersection grid new-c))
+              (in outer (collecting (cons new-c (gethash new-c seen))))
+              (setf queue (with-last queue new-c))))))))
+
+(defun compress-grid (grid)
+  (bind ((graph (make-hash-table :test #'equal))
+         (start (starting-point grid))
+         (end (end-point grid)))
+    (iter
+      (for y from 0 below (y-dim grid))
+      (iter
+        (for x from 0 below (x-dim grid))
+        (for c = (coord x y))
+        (when (or (= start c) (= end c) (is-intersection grid c))
+          (mapc (lambda (intersection)
+                  (push intersection (gethash c graph)))
+                (intersections-reachable grid c end)))))
+    graph))
+
+(defun is-not-in-path-back-graph (from start c dist test-c)
+  (and (/= start test-c)
+       (iter
+         (while (/= start c))
+         (never (= c test-c))
+         (for (next-coord . next-dist) = (gethash (cons c dist) from))
+         (setf c    next-coord
+               dist next-dist))))
+
+(defun longest-path-on-graph (graph start end)
+  (bind ((seen (make-hash-table :test #'equal))
+         (from (make-hash-table :test #'equal))
+         (queue (seq (cons start 0))))
+    (setf (gethash start seen) 0)
+    ;; Dijkstra
+    (iter
+      (while (not (empty? queue)))
+      (for (vertex . path-length) = (first queue))
+      (format t "(cons vertex path-length): ~a~%" (cons vertex path-length))
+      (setf queue (less-first queue))
+      (when (/= path-length (gethash vertex seen))
+        (next-iteration))
+      (iter
+        (for (next-vertex . next-distance) in (gethash vertex graph))
+        (for next-path-length = (+ path-length next-distance))
+        (when (and (> next-path-length (gethash next-vertex seen most-negative-fixnum))
+                   (is-not-in-path-back-graph from start vertex path-length next-vertex))
+          (setf (gethash (cons next-vertex next-path-length) from) (cons vertex path-length))
+          (setf (gethash next-vertex seen) next-path-length)
+          (setf queue (with-last queue (cons next-vertex next-path-length))))))
+
+    ;; Bellman-Ford
+    ;; (iter
+    ;;   (for (i-v i-d) in-hashtable graph)
+    ;;   (iter
+    ;;     (for (c edges) in-hashtable graph)
+    ;;     (format t "c: ~a~%" c)
+    ;;     (when (= c end)
+    ;;       (format t "~a~%"(gethash c seen most-negative-fixnum)))
+    ;;     (iter
+    ;;       (for (next-vertex . next-distance) in edges)
+    ;;       (for next-path-length = (+ next-distance (gethash c seen most-negative-fixnum)))
+    ;;       (when (> next-path-length (gethash next-vertex seen most-negative-fixnum))
+    ;;         (setf (gethash next-vertex seen) next-path-length)))))
+    (gethash end seen)))
+
+(defun longest-of-all (graph start end)
+  (labels ((recur (c dist seen)
+             (if (= end c)
+                 (print dist)
+                 (iter
+                   (for (new-coord . new-distance) in (gethash c graph))
+                   (when (not (contains? seen new-coord))
+                     (maximize (recur new-coord (+ dist new-distance) (with seen new-coord))
+                               :into longest))
+                   (finally (return (or longest most-negative-fixnum)))))))
+    (recur start 0 (set start))))
+
 (defun part-2 (&optional (file-relative-path "src/day-23.in"))
-  (bind ((problem (read-problem file-relative-path)))
-    (longest-paths-2 problem)
-    ;; (longest-of-all problem)
+  (bind ((grid (read-problem file-relative-path))
+         (graph (compress-grid grid))
+         (start (starting-point grid))
+         (end (end-point grid)))
+    (longest-of-all graph start end)
+    ;; (longest-paths-2 grid)
+    ;; (longest-of-all grid)
     ))
 
 ;; Wrong: 5018 (too low)
