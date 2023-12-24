@@ -192,18 +192,6 @@
           (setf queue (with-last queue (list new-coord new-dist new-direction))))))
     ))
 
-(defun longest-of-all (grid)
-  (bind ((start (starting-point grid))
-         (end (end-point grid)))
-    (labels ((recur (c dist seen)
-               (if (= end c)
-                   (print dist)
-                   (iter
-                     (for new-coord in (connecting-points-2 grid c))
-                     (when (not (contains? seen new-coord))
-                       (maximize (recur new-coord (1+ dist) (with seen new-coord))))))))
-      (recur start 0 (set start)))))
-
 (defun is-intersection (grid c)
   (> (iter
        (for (new-coord . _) in (connecting-points-2 grid c))
