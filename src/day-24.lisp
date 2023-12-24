@@ -140,37 +140,31 @@
 (defun test-1 ()
   (part-1 "src/day-24-test.in"))
 
-;; Idea: The stone velocity must divide into the components of all the
-;; hail stones.  So I need to find the lowest prime factor of their
-;; velocities shared by all stones.
+(defun stone-xs (hail-stones)
+  (bind ((stones-inner (mapcar (lambda (stone)
+                                 (with-slots (coord velocity) stone
+                                   (make-hail-stone
+                                    :coord (copy-coord coord)
+                                    :velocity (copy-velocity velocity))))
+                               hail-stones)))
+    (iter
+      (for i from 0 below 2)
+      (collecting
+       (print (iter
+                (for stone in stones-inner)
+                (with-slots (coord velocity) stone
+                  (with-slots (x) coord
+                    (with-slots (vx) velocity
+                      (collecting x)
+                      (incf (coord-x coord) vx))))))))))
 
-(defun prime-factors (x)
-  (iter
-    (for i from 2 to x)
-    (when (= (mod x i) 0)
-      (collecting i))))
-
-;; Might need to acconut for offset of hailstone.
-(defun find-velocity (hail-stones)
-  (iter
-    (for stone in hail-stones)
-    (with-slots (velocity) stone
-      (with-slots (vx vy vz) velocity
-        (collecting vx into vxs)
-        (collecting vy into vys)
-        (collecting vz into vzs)))
-    (finally
-     (return (make-velocity
-              :vx (print (apply #'lcm vxs))
-              :vy (print (apply #'lcm vys))
-              :vz (print (apply #'lcm vzs)))))))
-
-(defun find-start (hail-stones)
-  (find-velocity hail-stones))
+(defun find-x-component (hail-stones)
+  (bind ((xss (stone-xs hail-stones)))
+    xss))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
   (bind ((hail-stones (read-problem file-relative-path)))
-    (find-start hail-stones)))
+    (find-x-component hail-stones)))
 
 (defun test-2 ()
   (part-2 "src/day-24-test.in"))
