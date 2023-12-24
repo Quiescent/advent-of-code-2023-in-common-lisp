@@ -140,31 +140,37 @@
 (defun test-1 ()
   (part-1 "src/day-24-test.in"))
 
-(defun stone-xs (hail-stones)
-  (bind ((stones-inner (mapcar (lambda (stone)
-                                 (with-slots (coord velocity) stone
-                                   (make-hail-stone
-                                    :coord (copy-coord coord)
-                                    :velocity (copy-velocity velocity))))
-                               hail-stones)))
-    (iter
-      (for i from 0 below 2)
-      (collecting
-       (print (iter
-                (for stone in stones-inner)
-                (with-slots (coord velocity) stone
-                  (with-slots (x) coord
-                    (with-slots (vx) velocity
-                      (collecting x)
-                      (incf (coord-x coord) vx))))))))))
+;; Idea: for there to be a solution to the problem, the coefficients
+;; of the t term in the following system of equations must be
+;; co-prime.
+;;
+;; x_s = x_1 + (v_1 - v_s)t_1
+;; x_s = x_2 + (v_2 - v_s)t_2
+;; ...
+;; x_s = x_n + (v_n - v_s)t_n
+;;
+;; Therefore, v_s must be a number that, when subtracted from each of
+;; v_n, make them all coprime.
 
-(defun find-x-component (hail-stones)
-  (bind ((xss (stone-xs hail-stones)))
-    xss))
+;; Looks like the coefficients of the "t" term are already co-prime :/
+
+(defun x-velocities (hail-stones)
+  (mapcar (lambda (hail-stone)
+            (->> (hail-stone-velocity hail-stone)
+              velocity-vx))
+          hail-stones))
+
+(defun find-vs (hail-stones)
+  (bind ((vxs (x-velocities hail-stones)))
+    (iter
+      (for i from 3 below 1000)
+      (for adjusted-vxs = (mapcar (lambda (vx) (+ vx i)) vxs))
+      (format t "adjusted-vxs: ~a~%" adjusted-vxs)
+      (finding i such-that (= (apply #'gcd adjusted-vxs) 1)))))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
   (bind ((hail-stones (read-problem file-relative-path)))
-    (find-x-component hail-stones)))
+    (find-vs hail-stones)))
 
 (defun test-2 ()
   (part-2 "src/day-24-test.in"))
