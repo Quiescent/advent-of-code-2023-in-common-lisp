@@ -160,17 +160,58 @@
               velocity-vx))
           hail-stones))
 
+(defun all-coprime (xs)
+  (->> (maplist (lambda (ys)
+                  (reduce (lambda (acc next)
+                            (and acc
+                                 (= (gcd next acc) 1)
+                                 acc))
+                          (cdr ys)
+                          :initial-value (car ys)))
+                xs)
+    (notany #'null)))
+
 (defun find-vs (hail-stones)
   (bind ((vxs (x-velocities hail-stones)))
     (iter
-      (for i from 3 below 1000)
-      (for adjusted-vxs = (mapcar (lambda (vx) (+ vx i)) vxs))
-      (format t "adjusted-vxs: ~a~%" adjusted-vxs)
-      (finding i such-that (= (apply #'gcd adjusted-vxs) 1)))))
+      (for i from -100 below 100)
+      (for adjusted-vxs = (mapcar (lambda (vx) (- vx i)) vxs))
+      (format t "adjusted-vxs for ~a: ~a~%" i adjusted-vxs)
+      (finding i such-that (all-coprime adjusted-vxs)))))
+
+(defun find-vx (hail-stones)
+  (bind ((one-stone (car hail-stones))
+         (x1 (->> (hail-stone-coord one-stone) coord-x))
+         (vx1 (->> (hail-stone-velocity one-stone) velocity-vx))
+         (other-stones (cdr hail-stones)))
+    (iter
+      (for vs from -200 to 200)
+      (format t "vs: ~a~%" vs)
+      (finding vs such-that
+               (iter
+                 (for other-stone in other-stones)
+                 (for x2 = (->> (hail-stone-coord other-stone) coord-x))
+                 (for vx2 = (->> (hail-stone-velocity other-stone) velocity-vx))
+                 (always (iter
+                           (for t1 from 0 below 10000)
+                           (for xs1 = (+ x1 (* (- vx1 vs) t1)))
+                           (when (= (- vx2 vs) 0)
+                             (next-iteration))
+                           (for t2 = (mod (- xs1 x2) (- vx2 vs)))
+                           (thereis (= t2 0)))))))))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
   (bind ((hail-stones (read-problem file-relative-path)))
-    (find-vs hail-stones)))
+    (find-vx hail-stones)))
 
 (defun test-2 ()
   (part-2 "src/day-24-test.in"))
+
+;; Call that coefficient "m".
+;;
+;; Then our system of equations looks like this:
+;;
+;; x_s = x_1 + m_1*t_1
+;; x_s = x_2 + m_2*t_2
+;; ...
+;; x_s = x_n + m_n*t_n
