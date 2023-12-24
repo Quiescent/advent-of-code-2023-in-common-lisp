@@ -183,22 +183,35 @@
   (bind ((one-stone (car hail-stones))
          (x1 (->> (hail-stone-coord one-stone) coord-x))
          (vx1 (->> (hail-stone-velocity one-stone) velocity-vx))
-         (other-stones (cdr hail-stones)))
+         (other-stones (cdr hail-stones))
+         (vs (iter
+               (for vs from -200 to 200)
+               (format t "vs: ~a~%" vs)
+               (finding vs such-that
+                        (iter
+                          (for other-stone in other-stones)
+                          (for x2 = (->> (hail-stone-coord other-stone) coord-x))
+                          (for vx2 = (->> (hail-stone-velocity other-stone) velocity-vx))
+                          (always (iter
+                                    (for t1 from 1 below 10000)
+                                    (for xs1 = (+ x1 (* (- vx1 vs) t1)))
+                                    (when (= (- vx2 vs) 0)
+                                      (next-iteration))
+                                    (for t-2 = (floor (- xs1 x2) (- vx2 vs)))
+                                    (for rem-t2 = (mod (- xs1 x2) (- vx2 vs)))
+                                    (when (= rem-t2 0)
+                                      (format t "t-2: ~a~%" t-2))
+                                    (thereis (= rem-t2 0)))))))))
     (iter
-      (for vs from -200 to 200)
-      (format t "vs: ~a~%" vs)
-      (finding vs such-that
+      (for xs from 1 to 200)
+      (format t "xs: ~a~%" xs)
+      (finding xs such-that
                (iter
-                 (for other-stone in other-stones)
-                 (for x2 = (->> (hail-stone-coord other-stone) coord-x))
-                 (for vx2 = (->> (hail-stone-velocity other-stone) velocity-vx))
-                 (always (iter
-                           (for t1 from 0 below 10000)
-                           (for xs1 = (+ x1 (* (- vx1 vs) t1)))
-                           (when (= (- vx2 vs) 0)
-                             (next-iteration))
-                           (for t2 = (mod (- xs1 x2) (- vx2 vs)))
-                           (thereis (= t2 0)))))))))
+                 (for stone in hail-stones)
+                 (for x = (->> (hail-stone-coord stone) coord-x))
+                 (for vx = (->> (hail-stone-velocity stone) velocity-vx))
+                 (always (and (/= (- vx vs) 0)
+                              (= (mod (print (- xs x)) (print (- vx vs))) 0))))))))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
   (bind ((hail-stones (read-problem file-relative-path)))
