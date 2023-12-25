@@ -179,43 +179,40 @@
       (format t "adjusted-vxs for ~a: ~a~%" i adjusted-vxs)
       (finding i such-that (all-coprime adjusted-vxs)))))
 
-(defun find-vx (hail-stones)
+(defun find-component-v (hail-stones pos-accessor v-accessor)
   (bind ((one-stone (car hail-stones))
-         (x1 (->> (hail-stone-coord one-stone) coord-x))
-         (vx1 (->> (hail-stone-velocity one-stone) velocity-vx))
-         (other-stones (cdr hail-stones))
-         (vs (iter
-               (for vs from -200 to 200)
-               (format t "vs: ~a~%" vs)
-               (finding vs such-that
-                        (iter
-                          (for other-stone in other-stones)
-                          (for x2 = (->> (hail-stone-coord other-stone) coord-x))
-                          (for vx2 = (->> (hail-stone-velocity other-stone) velocity-vx))
-                          (always (iter
-                                    (for t1 from 1 below 10000)
-                                    (for xs1 = (+ x1 (* (- vx1 vs) t1)))
-                                    (when (= (- vx2 vs) 0)
-                                      (next-iteration))
-                                    (for t-2 = (floor (- xs1 x2) (- vx2 vs)))
-                                    (for rem-t2 = (mod (- xs1 x2) (- vx2 vs)))
-                                    (when (= rem-t2 0)
-                                      (format t "t-2: ~a~%" t-2))
-                                    (thereis (= rem-t2 0)))))))))
+         (x1 (->> (hail-stone-coord one-stone) (funcall pos-accessor)))
+         (vx1 (->> (hail-stone-velocity one-stone) (funcall v-accessor)))
+         (other-stones (cdr hail-stones)))
     (iter
-      (for xs from 1 to 200)
-      (format t "xs: ~a~%" xs)
-      (finding xs such-that
-               (iter
-                 (for stone in hail-stones)
-                 (for x = (->> (hail-stone-coord stone) coord-x))
-                 (for vx = (->> (hail-stone-velocity stone) velocity-vx))
-                 (always (and (/= (- vx vs) 0)
-                              (= (mod (print (- xs x)) (print (- vx vs))) 0))))))))
+      (for vs from -300 to 300)
+      (for t1 = (iter
+                  (for t1 from 1 below 100000)
+                  (finding t1 such-that
+                           (iter
+                             (for other-stone in other-stones)
+                             (for x2 = (->> (hail-stone-coord other-stone)
+                                         (funcall pos-accessor)))
+                             (for vx2 = (->> (hail-stone-velocity other-stone)
+                                          (funcall v-accessor)))
+                             (for xs = (+ x1 (* (- vx1 vs) t1)))
+                             (when (= (- vx2 vs) 0)
+                               (next-iteration))
+                             (for rem-t2 = (mod (- xs x2) (- vx2 vs)))
+                             (always (= rem-t2 0))) )))
+      (when t1
+        (collecting (cons t1 vs))))))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
-  (bind ((hail-stones (read-problem file-relative-path)))
-    (find-vx hail-stones)))
+  (bind ((hail-stones (read-problem file-relative-path))
+         (xs (print (find-component-v hail-stones #'coord-x #'velocity-vx)))
+         (ys (print (find-component-v hail-stones #'coord-y #'velocity-vy)))
+         (zs (print (find-component-v hail-stones #'coord-z #'velocity-vz)))
+         (t1 (->> (cl:intersection zs (cl:intersection xs ys :key #'car)
+                                   :key #'car)
+               (mapcar #'car)
+               remove-duplicates)))
+    t1))
 
 (defun test-2 ()
   (part-2 "src/day-24-test.in"))
