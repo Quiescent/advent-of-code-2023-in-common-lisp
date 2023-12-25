@@ -122,11 +122,11 @@
                  (for other in (gethash node graph))
                  (when (null (gethash other seen))
                    (setf (gethash other seen) t)
-                   (incf (gethash (sort (list node other)
-                                        #'string-lessp
-                                        :key #'symbol-name)
-                                  seen-count
-                                  0))
+                   (for edge = (sort (list node other)
+                                     #'string-lessp
+                                     :key #'symbol-name))
+                   (setf current-set (with current-set edge))
+                   (incf (gethash edge seen-count 0))
                    (recur other)))))
       (iter
         (for (node edges) in-hashtable graph)
@@ -134,7 +134,44 @@
         (setf current-set (empty-set))
         (recur node)
         (push current-set seen-sets))
-      seen-count)))
+      seen-sets)))
+
+(defun shuffle (xs)
+  (iter
+    (for i from (1- (length xs)) downto 1)
+    (for j = (random (1+ i)))
+    (rotatef (car (nthcdr i xs))
+             (car (nthcdr j xs)))
+    (finally (return xs))))
+
+(defun dfs-until-three (graph)
+  (bind ((seen-count (make-hash-table :test #'equal))
+         (seen (make-hash-table))
+         (nodes (-> (iter
+                      (for (key value) in-hashtable graph)
+                      (collecting key))
+                  (coerce 'vector))))
+    (labels ((recur (node)
+               (iter
+                 (for other in (shuffle (gethash node graph)))
+                 (when (null (gethash other seen))
+                   (setf (gethash other seen) t)
+                   (for edge = (sort (list node other)
+                                     #'string-lessp
+                                     :key #'symbol-name))
+                   (incf (gethash edge seen-count 0))
+                   (recur other)))))
+      (iter
+        (for i from 0 below 1000000)
+        (format t "i: ~a~%" i)
+        (for start = (aref nodes (random (length nodes))))
+        (setf seen (make-hash-table))
+        (recur start))
+      (-> (iter
+             (for (key value) in-hashtable seen-count)
+             (collecting (cons value key)))
+        (sort #'> :key #'car)
+        (subseq 0 3)))))
 
 (defun to-graph (edges)
   (bind ((graph (make-hash-table)))
@@ -146,17 +183,52 @@
         (push start (gethash end graph))))
     graph))
 
+(defun remove-one-by-one (orig-graph)
+  (labels ((recur (graph disconnected)
+             ;; (format t "disconnected: ~a~%" disconnected)
+             (cond
+               ((> (length disconnected) 3) nil)
+               ((and (= (length disconnected) 3)
+                     (> (length (components graph)) 1))
+                (->> (components graph)
+                  (mapcar #'length)
+                  (apply #'*)))
+               (t (bind ((candidates (->> (dfs-from-all graph)
+                                       (reduce #'intersection)
+                                       (convert 'list))))
+                    (format t "candidates: ~a~%" candidates)
+                    (iter
+                      (for candidate in candidates)
+                      (for (start end) = candidate)
+                      (for current-graph = (copy-hashtable graph))
+                      (setf (gethash start current-graph)
+                            (remove end (gethash start current-graph)))
+                      (setf (gethash end current-graph)
+                            (remove start (gethash end current-graph)))
+                      (for result = (recur current-graph (cons candidate disconnected)))
+                      (finding result such-that result)
+                      ;; (push end (gethash start current-graph))
+                      ;; (setf start (gethash end current-graph))
+                      ))))))
+    (recur orig-graph (list))))
+
 (defun part-1 (&optional (file-relative-path "src/day-25.in"))
   (bind ((edge-list (read-problem file-relative-path))
-         (graph (to-graph edge-list)))
-    (dfs-from-all graph)))
+         (graph (to-graph edge-list))
+         (edges-to-remove (->> (dfs-until-three graph)
+                            (mapcar #'cdr))))
+    (format t "edges-to-remove: ~a~%" edges-to-remove)
+    (iter
+      (for (start end) in edges-to-remove)
+      (setf (gethash start graph)
+            (remove end (gethash start graph)))
+      (setf (gethash end graph)
+            (remove start (gethash end graph))))
+    (->> (components graph)
+      (mapcar #'length)
+      (apply #'*))))
+
+;; Too low: 1435
 
 (defun test-1 ()
   (part-1 "src/day-25-test.in"))
-
-(defun part-2 (&optional (file-relative-path "src/day-25.in"))
-  (bind ((edge-list (read-problem file-relative-path)))
-    ))
-
-(defun test-2 ()
-  (part-2 "src/day-25-test.in"))
