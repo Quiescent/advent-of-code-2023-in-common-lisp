@@ -102,21 +102,10 @@
                (o-vy (velocity-vy o-velocity))
                (i-point (line-intersection vx x o-vx o-x
                                            vy y o-vy o-y)))
-          (when (not i-point)
-            (format t "No collision~%~%"))
           (and i-point
                (bind (((x-coll . y-coll) i-point)
                       (time-1 (floor (/ (- x-coll x) vx)))
                       (time-2 (floor (/ (- x-coll o-x) o-vx))))
-                 (format t "x-coll: ~a~%" (coerce x-coll 'float))
-                 (format t "y-coll: ~a~%" (coerce y-coll 'float))
-                 (format t "time: ~a~%" time-1)
-                 (format t "time: ~a~%" time-2)
-                 (format t "in: ~a~%" (and (> time-1 0)
-                                           (> time-2 0)
-                                           (in-test-area x-coll)
-                                           (in-test-area y-coll)))
-                 (format t "~%" )
                  (and (> time-1 0)
                       (> time-2 0)
                       (in-test-area x-coll)
@@ -140,134 +129,134 @@
 (defun test-1 ()
   (part-1 "src/day-24-test.in"))
 
-;; Idea: for there to be a solution to the problem, the coefficients
-;; of the t term in the following system of equations must be
-;; co-prime.
-;;
-;; x_s = x_1 + (v_1 - v_s)t_1
-;; x_s = x_2 + (v_2 - v_s)t_2
-;; ...
-;; x_s = x_n + (v_n - v_s)t_n
-;;
-;; Therefore, v_s must be a number that, when subtracted from each of
-;; v_n, make them all coprime.
+(defun intersect-3d (x1 y1 z1 vx1 vy1 vz1
+                     x2 y2 z2 vx2 vy2 vz2)
+  (bind ((intersection-xy (line-intersection vx1 x1 vx2 x2 vy1 y1 vy2 y2)))
+    (when intersection-xy
+      (bind (((x . y) intersection-xy)
+             (t1 (/ (- x x1) vx1))
+             (t2 (/ (- x x2) vx2))
+             (z-col-1 (+ z1 (* vz1 t1)))
+             (z-col-2 (+ z2 (* vz2 t2))))
+        (when (and (> t1 0)
+                   (= (floor t1) t1)
+                   (> t2 0)
+                   (= (floor t2) t2)
+                   (= z-col-1 z-col-2))
+          (list x y z-col-1))))))
 
-;; Looks like the coefficients of the "t" term are already co-prime :/
-
-(defun x-velocities (hail-stones)
-  (mapcar (lambda (hail-stone)
-            (->> (hail-stone-velocity hail-stone)
-              velocity-vx))
-          hail-stones))
-
-(defun all-coprime (xs)
-  (->> (maplist (lambda (ys)
-                  (reduce (lambda (acc next)
-                            (and acc
-                                 (= (gcd next acc) 1)
-                                 acc))
-                          (cdr ys)
-                          :initial-value (car ys)))
-                xs)
-    (notany #'null)))
-
-(defun find-vs (hail-stones)
-  (bind ((vxs (x-velocities hail-stones)))
+(defun all-collide (hail-stones vx-delta vy-delta vz-delta)
+  (bind ((collision-point)
+         (first-stone (aref hail-stones 0))
+         ((x1 y1 z1 vx1 vy1 vz1)
+          (with-slots (coord velocity) first-stone
+            (with-slots (x y z) coord
+              (with-slots (vx vy vz) velocity
+                (list x y z vx vy vz))))))
     (iter
-      (for i from -300 below 300)
-      (for adjusted-vxs = (mapcar (lambda (vx) (- vx i)) vxs))
-      (format t "adjusted-vxs for ~a: ~a~%" i adjusted-vxs)
-      (finding i such-that (all-coprime adjusted-vxs)))))
+      (for stone in-vector hail-stones from 1)
+      (for collision = (with-slots (coord velocity) stone
+                         (with-slots (x y z) coord
+                           (with-slots (vx vy vz) velocity
+                             (intersect-3d x1 y1 z1
+                                           (- vx1 vx-delta)
+                                           (- vy1 vy-delta)
+                                           (- vz1 vz-delta)
+                                           x y z
+                                           (- vx vx-delta)
+                                           (- vy vy-delta)
+                                           (- vz vz-delta))))))
+      (when (null collision-point)
+        (setf collision-point collision))
+      (always (equal collision collision-point))
+      (finally (return collision-point)))))
 
-(defun find-component-v (hail-stones pos-accessor v-accessor)
-  (bind ((one-stone (car hail-stones))
-         (x1 (->> (hail-stone-coord one-stone) (funcall pos-accessor)))
-         (vx1 (->> (hail-stone-velocity one-stone) (funcall v-accessor)))
-         (other-stones (cdr hail-stones)))
+(defun all-collide-xy (hail-stones vx-delta vy-delta)
+  (bind ((collision-point)
+         (first-stone (aref hail-stones 0))
+         ((x1 y1 vx1 vy1)
+          (with-slots (coord velocity) first-stone
+            (with-slots (x y) coord
+              (with-slots (vx vy) velocity
+                (list x y vx vy))))))
     (iter
-      (for vs from -300 to 300)
-      (for t1 = (iter
-                  (for t1 from 1 below 100000)
-                  (finding t1 such-that
-                           (iter
-                             (for other-stone in other-stones)
-                             (for x2 = (->> (hail-stone-coord other-stone)
-                                         (funcall pos-accessor)))
-                             (for vx2 = (->> (hail-stone-velocity other-stone)
-                                          (funcall v-accessor)))
-                             (for xs = (+ x1 (* (- vx1 vs) t1)))
-                             (when (= (- vx2 vs) 0)
-                               (next-iteration))
-                             (for rem-t2 = (mod (- xs x2) (- vx2 vs)))
-                             (always (= rem-t2 0))) )))
-      (when t1
-        (collecting (cons t1 vs))))))
+      (for stone in-vector hail-stones from 1)
+      (for collision = (with-slots (coord velocity) stone
+                         (with-slots (x y) coord
+                           (with-slots (vx vy) velocity
+                             (line-intersection (- vx1 vx-delta)
+                                                x1
+                                                (- vx vx-delta)
+                                                x
+                                                (- vy1 vy-delta)
+                                                y1
+                                                (- vy vy-delta)
+                                                y)))))
+      (when (null collision-point)
+        (setf collision-point collision))
+      (always (equal collision collision-point))
+      (finally (return collision-point)))))
 
-(defun hail-stone-deep-copy (stone)
-  (with-slots (coord velocity) stone
-    (with-slots (x y z) coord
-      (make-hail-stone
-       :coord (copy-coord coord)
-       :velocity (copy-velocity velocity)))))
+(defun intersect-z (x-col y-col
+                    x1 vx1 x2 vx2
+                    y1 vy1 y2 vy2
+                    z1 vz1 z2 vz2)
+  (bind ((t1 (or (and (/= vx1 0) (/ (- x-col x1) vx1))
+                 (and (/= vy1 0) (/ (- y-col y1) vy1))))
+         (t2 (or (and (/= vx2 0) (/ (- x-col x2) vx2))
+                 (and (/= vy2 0) (/ (- y-col y2) vy2))))
+         (z-col-1 (+ z1 (* vz1 t1)))
+         (z-col-2 (+ z2 (* vz2 t2))))
+    (when (and (> t1 0)
+               (= (floor t1) t1)
+               (> t2 0)
+               (= (floor t2) t2)
+               (= z-col-1 z-col-2))
+      (list x-col y-col z-col-1))))
 
-(defun min-neg-vel-pos (hail-stones pos-accessor vel-accessor)
-  (iter
-    (for stone in hail-stones)
-    (for pos = (->> (hail-stone-coord stone)
-                 (funcall pos-accessor)))
-    (for vel = (->> (hail-stone-velocity stone)
-                 (funcall vel-accessor)))
-    (when (< vel 0)
-      (minimizing pos))))
+(defun all-collide-z (hail-stones x-col y-col vx-delta vy-delta vz-delta)
+  (bind ((collision-point)
+         (first-stone (aref hail-stones 0))
+         ((x1 y1 z1 vx1 vy1 vz1)
+          (with-slots (coord velocity) first-stone
+            (with-slots (x y z) coord
+              (with-slots (vx vy vz) velocity
+                (list x y z vx vy vz))))))
+    (iter
+      (for stone in-vector hail-stones from 1)
+      (for collision = (with-slots (coord velocity) stone
+                         (with-slots (x y z) coord
+                           (with-slots (vx vy vz) velocity
+                             (intersect-z x-col y-col
+                                          x1    (- vx1 vx-delta)
+                                          x     (- vx  vx-delta)
+                                          y1    (- vy1 vy-delta)
+                                          y     (- vy  vy-delta)
+                                          z1    (- vz1 vz-delta)
+                                          z     (- vz  vz-delta))))))
+      (when (null collision-point)
+        (setf collision-point collision))
+      (always (equal collision collision-point))
+      (finally (return collision-point)))))
 
-(defun max-pos-vel-pos (hail-stones pos-accessor vel-accessor)
-  (iter
-    (for stone in hail-stones)
-    (for pos = (->> (hail-stone-coord stone)
-                 (funcall pos-accessor)))
-    (for vel = (->> (hail-stone-velocity stone)
-                 (funcall vel-accessor)))
-    (when (> vel 0)
-      (maximizing pos))))
-
-(defun find-vs-divide (hail-stones pos-accessor vel-accessor)
-  (iter
-    (for vs from -1000 to 1000)
-    (when (= vs 0)
-      (next-iteration))
-    (finding vs such-that
-             (iter
-               (for stone in hail-stones)
-               (for pos = (->> (hail-stone-coord stone)
-                            (funcall pos-accessor)))
-               (for vel = (->> (hail-stone-velocity stone)
-                            (funcall vel-accessor)))
-               (and (= (mod pos vs) 0)
-                    (= (mod vel vs) 0))))))
+(defun scan-velocities-for-all-collision (hail-stones-list)
+  (bind ((hail-stones (coerce hail-stones-list 'vector)))
+    (iter outer
+      (for vx from -400 to 400)
+      (iter
+        (for vy from -400 to 400)
+        (for collision-xy = (all-collide-xy hail-stones vx vy))
+        (when (not collision-xy)
+          (next-iteration))
+        (for (x . y) = collision-xy)
+        (iter
+          (for vz from -400 to 400)
+          (for collision-point = (all-collide-z hail-stones x y vx vy vz))
+          (in outer (finding collision-point such-that collision-point)))))))
 
 (defun part-2 (&optional (file-relative-path "src/day-24.in"))
   (bind ((hail-stones (read-problem file-relative-path)))
-    (find-vs-divide hail-stones #'coord-x #'velocity-vx)))
-
-#+nil
-(bind ((hail-stones (read-problem file-relative-path))
-       (xs (print (find-component-v hail-stones #'coord-x #'velocity-vx)))
-       (ys (print (find-component-v hail-stones #'coord-y #'velocity-vy)))
-       (zs (print (find-component-v hail-stones #'coord-z #'velocity-vz)))
-       (t1 (->> (cl:intersection zs (cl:intersection xs ys :key #'car)
-                                 :key #'car)
-             (mapcar #'car)
-             remove-duplicates)))
-  t1)
+    (apply #'+ (scan-velocities-for-all-collision hail-stones))))
 
 (defun test-2 ()
   (part-2 "src/day-24-test.in"))
-
-;; Call that coefficient "m".
-;;
-;; Then our system of equations looks like this:
-;;
-;; x_s = x_1 + m_1*t_1
-;; x_s = x_2 + m_2*t_2
-;; ...
-;; x_s = x_n + m_n*t_n
